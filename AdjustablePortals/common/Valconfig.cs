@@ -1,4 +1,5 @@
-﻿using BepInEx;
+﻿using AdjustablePortals.modules;
+using BepInEx;
 using BepInEx.Configuration;
 using Jotunn.Entities;
 using Jotunn.Managers;
@@ -15,6 +16,14 @@ namespace AdjustablePortals {
 
         public static ConfigEntry<float> PortalPieceActivationDistance;
         public static ConfigEntry<int> PortalNearbyPiecesForActivation;
+        public static ConfigEntry<string> DefeatedEikthyrAllowedItems;
+        public static ConfigEntry<string> DefeatedElderAllowedItems;
+        public static ConfigEntry<string> DefeatedBonemassAllowedItems;
+        public static ConfigEntry<string> DefeatedModerAllowItems;
+        public static ConfigEntry<string> DefeatedYagluthAllowItems;
+        public static ConfigEntry<string> DefeatedQueenAllowItems;
+        public static ConfigEntry<string> DefeatedFaderAllowItems;
+
 
         public ValConfig(ConfigFile cf) {
             // ensure all the config values are created
@@ -35,6 +44,21 @@ namespace AdjustablePortals {
 
             PortalNearbyPiecesForActivation = BindServerConfig("PortalActivation", "PortalNearbyPiecesForActivation", 2000, "The number of building pieces required nearby in order for a portal to be activated.", false, 0, 10000);
             PortalPieceActivationDistance = BindServerConfig("PortalActivation", "PortalPieceActivationDistance", 100f, "The distance that will be checked for nearby building pieces to meet the required structures nearby.");
+
+            DefeatedEikthyrAllowedItems = BindServerConfig("PortalProgression", "DefeatedEikthyrAllowedItems", "", "Comma seperated list of prefab items that will be allowed to teleported once Eikthyr is defeated.");
+            DefeatedEikthyrAllowedItems.SettingChanged += TeleportItems.EikthyrAllowedTeleportsChanged;
+            DefeatedElderAllowedItems = BindServerConfig("PortalProgression", "DefeatedElderAllowedItems", "", "Comma seperated list of prefab items that will be allowed to be teleported once The Elder is defeated.");
+            DefeatedElderAllowedItems.SettingChanged += TeleportItems.ElderAllowedTeleportsChanged;
+            DefeatedBonemassAllowedItems = BindServerConfig("PortalProgression", "DefeatedBonemassAllowedItems", "Bronze,Copper,Tin,CopperOre,TinOre,BronzeScrap", "Comma seperated list of prefab items that will be allowed to be teleported once Bonemass is defeated.");
+            DefeatedBonemassAllowedItems.SettingChanged += TeleportItems.BonemassAllowedTeleportsChanged;
+            DefeatedModerAllowItems = BindServerConfig("PortalProgression", "DefeatedModerAllowItems", "Iron,IronOre,Ironpit,IronScrap,chest_hildir1,chest_hildir2,chest_hildir3", "Comma seperated list of prefab items that will be allowed to be teleported once Moder is defeated.");
+            DefeatedModerAllowItems.SettingChanged += TeleportItems.ModerAllowedTeleportsChanged;
+            DefeatedYagluthAllowItems = BindServerConfig("PortalProgression", "DefeatedYagluthAllowItems", "Silver,SilverOre,DragonEgg", "Comma seperated list of prefab items that will be allowed to be teleported once Yagluth is defeated.");
+            DefeatedYagluthAllowItems.SettingChanged += TeleportItems.YagluthAllowedTeleportsChanged;
+            DefeatedQueenAllowItems = BindServerConfig("PortalProgression", "DefeatedQueenAllowItems", "MechanicalSpring,BlackMetal,BlackMetalScrap", "Comma seperated list of prefab items that will be allowed to be teleported once The Seeker Queen is defeated.");
+            DefeatedQueenAllowItems.SettingChanged += TeleportItems.QueenAllowedTeleportsChanged;
+            DefeatedFaderAllowItems = BindServerConfig("PortalProgression", "DefeatedFaderAllowItems", "DvergrNeedle", "Comma seperated list of prefab items that will be allowed to be teleported once Fader is defeated.");
+            DefeatedFaderAllowItems.SettingChanged += TeleportItems.FaderAllowedTeleportsChanged;
         }
 
 

@@ -1,4 +1,5 @@
-﻿using BepInEx;
+﻿using AdjustablePortals.modules;
+using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
 using Jotunn.Entities;
@@ -10,12 +11,12 @@ namespace AdjustablePortals
 {
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
     [BepInDependency(Jotunn.Main.ModGuid)]
-    //[NetworkCompatibility(CompatibilityLevel.EveryoneMustHaveMod, VersionStrictness.Minor)]
+    [NetworkCompatibility(CompatibilityLevel.EveryoneMustHaveMod, VersionStrictness.Minor)]
     internal class AdjustablePortals : BaseUnityPlugin
     {
         public const string PluginGUID = "MidnightsFX.AdjustablePortals";
         public const string PluginName = "AdjustablePortals";
-        public const string PluginVersion = "0.0.1";
+        public const string PluginVersion = "0.1.0";
         internal static Harmony Harmony = new Harmony(PluginGUID);
 
         public static CustomLocalization Localization = LocalizationManager.Instance.GetLocalization();
@@ -23,7 +24,9 @@ namespace AdjustablePortals
 
         public void Awake()
         {
+            Log = this.Logger;
             new ValConfig(Config);
+            TeleportItems.SetupTeleportLists();
             Assembly assembly = Assembly.GetExecutingAssembly();
             Harmony.PatchAll(assembly);
         }
