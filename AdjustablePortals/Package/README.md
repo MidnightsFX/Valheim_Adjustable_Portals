@@ -1,4 +1,4 @@
-﻿# Adjustable Portals
+# Adjustable Portals
 
 This mod aims to make portal progression more gradual, and encourage portals only in large bases. 
 
