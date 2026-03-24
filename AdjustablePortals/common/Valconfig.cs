@@ -23,6 +23,11 @@ namespace AdjustablePortals {
         public static ConfigEntry<string> DefeatedYagluthAllowItems;
         public static ConfigEntry<string> DefeatedQueenAllowItems;
         public static ConfigEntry<string> DefeatedFaderAllowItems;
+        public static ConfigEntry<bool> EnablePortalPieceRequirements;
+        public static ConfigEntry<bool> EnablePortalRequireFuel;
+        public static ConfigEntry<int> PortalFuelUsagesPerBatch;
+        public static ConfigEntry<int> PortalFuelBatchSize;
+        public static ConfigEntry<string> PortalFuelPrefab;
 
 
         public ValConfig(ConfigFile cf) {
@@ -42,8 +47,15 @@ namespace AdjustablePortals {
                 new ConfigurationManagerAttributes { IsAdvanced = true }));
             EnableDebugMode.SettingChanged += Logger.enableDebugLogging;
 
-            PortalNearbyPiecesForActivation = BindServerConfig("PortalActivation", "PortalNearbyPiecesForActivation", 2000, "The number of building pieces required nearby in order for a portal to be activated.", false, 0, 10000);
+            EnablePortalPieceRequirements = BindServerConfig("PortalActivation", "EnablePortalPieceRequirements", true, "When enabled, portals require a set number of building pieces around them in order to activate");
+            PortalNearbyPiecesForActivation = BindServerConfig("PortalActivation", "PortalNearbyPiecesForActivation", 1000, "The number of building pieces required nearby in order for a portal to be activated.", false, 0, 10000);
             PortalPieceActivationDistance = BindServerConfig("PortalActivation", "PortalPieceActivationDistance", 100f, "The distance that will be checked for nearby building pieces to meet the required structures nearby.");
+
+            EnablePortalRequireFuel = BindServerConfig("PortalActivation", "EnablePortalRequireFuel", false, "When enabled, portals require a fuel item to teleport users");
+            PortalFuelUsagesPerBatch = BindServerConfig("PortalActivation", "PortalFuelUsagesPerBatch", 20, "The number of usages that one batch of the fuel type provides");
+            PortalFuelBatchSize = BindServerConfig("PortalActivation", "PortalFuelBatchSize", 1, "The number of the portal fuel required for activation.");
+            PortalFuelPrefab = BindServerConfig("PortalActivation", "PortalFuelPrefab", "SurtlingCore", "The prefab name that will be used for the portal costs.");
+
 
             DefeatedEikthyrAllowedItems = BindServerConfig("PortalProgression", "DefeatedEikthyrAllowedItems", "", "Comma seperated list of prefab items that will be allowed to teleported once Eikthyr is defeated.");
             DefeatedEikthyrAllowedItems.SettingChanged += TeleportItems.EikthyrAllowedTeleportsChanged;

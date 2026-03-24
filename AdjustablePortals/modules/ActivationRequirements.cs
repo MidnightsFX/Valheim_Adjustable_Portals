@@ -1,7 +1,9 @@
-﻿using HarmonyLib;
+﻿using AdjustablePortals.common;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -13,9 +15,22 @@ namespace AdjustablePortals.modules {
         internal static class PortalInstanceActivatable {
 
             private static readonly int pieceMask = LayerMask.GetMask("piece"); // "piece_nonsolid"
+            private static readonly string fuelKey = "AJP_FUEL";
             private static float update_timer = 0f;
             private static float current_update_time = 0f;
-            private static int nearby_pieces = 0;
+
+            private static Dictionary<uint, int> nearbyPiecesByPortal = new Dictionary<uint, int>();
+
+            private static int GetCurrentPiecesForSpecificPortal(uint id) {
+                int current_pieces;
+                if (nearbyPiecesByPortal.ContainsKey(id)) {
+                    current_pieces = nearbyPiecesByPortal[id];
+                } else {
+                    current_pieces = 1;
+                    nearbyPiecesByPortal.Add(id, current_pieces);
+                }
+                return current_pieces;
+            }
 
             [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.HaveTarget))]
             [HarmonyPostfix]
@@ -23,15 +38,34 @@ namespace AdjustablePortals.modules {
                 if (__instance.m_nview == null || __instance.m_nview.IsValid() == false ) {
                     return;
                 }
-                current_update_time += UnityEngine.Time.fixedDeltaTime;
-                if (update_timer <= current_update_time) {
-                    // TODO: configurable duration for delta offset
-                    update_timer = current_update_time + 10;
-                    Collider[] nearbyPieces = Physics.OverlapSphere(__instance.transform.position, ValConfig.PortalPieceActivationDistance.Value, pieceMask);
-                    nearby_pieces = nearbyPieces.Length;
+
+                // Piece requirements
+                if (ValConfig.EnablePortalPieceRequirements.Value) {
+                    uint id = __instance.m_nview.GetZDO().m_uid.ID;
+                    int current_pieces = GetCurrentPiecesForSpecificPortal(id);
+
+                    current_update_time += UnityEngine.Time.fixedDeltaTime;
+                    if (update_timer <= current_update_time) {
+                        // TODO: configurable duration for delta offset
+                        //if (nearby_pieces >= ValConfig.PortalNearbyPiecesForActivation.Value) {
+                        //    update_timer = current_update_time + 500;
+                        //}
+                        update_timer = current_update_time + 10;
+                        Collider[] nearbyPieces = Physics.OverlapSphere(__instance.transform.position, ValConfig.PortalPieceActivationDistance.Value, pieceMask);
+                        current_pieces = nearbyPieces.Length;
+                        nearbyPiecesByPortal[id] = current_pieces;
+                    }
+                    if (current_pieces < ValConfig.PortalNearbyPiecesForActivation.Value) {
+                        __result = false;
+                    }
                 }
-                if (nearby_pieces < ValConfig.PortalNearbyPiecesForActivation.Value) {
-                    __result = false;
+
+                // Fuel requirements
+                if (ValConfig.EnablePortalRequireFuel.Value) {
+                    int fuel = __instance.m_nview.GetZDO().GetInt(fuelKey, 0);
+                    if (fuel == 0) {
+                        __result = false;
+                    }
                 }
             }
 
@@ -39,21 +73,78 @@ namespace AdjustablePortals.modules {
             [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.GetHoverText))]
             [HarmonyPostfix]
             internal static void OnHoverHelp(TeleportWorld __instance, ref string __result) {
-                if (__instance.m_nview == null || __instance.m_nview.IsValid() == false || nearby_pieces > ValConfig.PortalNearbyPiecesForActivation.Value) {
+                if (__instance.m_nview == null || __instance.m_nview.IsValid() == false) {
                     return;
                 }
-                __result += Localization.instance.Localize($"\nMore nearby structures required ({nearby_pieces}/{ValConfig.PortalNearbyPiecesForActivation.Value})");
+                if (ValConfig.EnablePortalPieceRequirements.Value) {
+                    int current_pieces = GetCurrentPiecesForSpecificPortal(__instance.m_nview.GetZDO().m_uid.ID);
+                    if (current_pieces < ValConfig.PortalNearbyPiecesForActivation.Value) {
+                        __result += Localization.instance.Localize($"\nMore nearby structures required ({current_pieces}/{ValConfig.PortalNearbyPiecesForActivation.Value})");
+                    }
+                }
+                if (ValConfig.EnablePortalRequireFuel.Value) {
+                    int fuel = __instance.m_nview.GetZDO().GetInt(fuelKey, 0);
+                    if (fuel == 0) {
+                        __result += Localization.instance.Localize($"\nFuel is required, add <color=red>{ValConfig.PortalFuelPrefab.Value}</color> x {ValConfig.PortalFuelBatchSize.Value}");
+                    } else {
+                        __result += Localization.instance.Localize($"\nCurrent Fuel {fuel}.");
+                    }
+                }
+
             }
 
             // Mutate the result of the portal connection, so that falling below the number of required pieces kills the portal connection
             [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.TargetFound))]
             [HarmonyPostfix]
             internal static void TargetFoundPrevention(TeleportWorld __instance, ref bool __result) {
-                if (__instance.m_nview == null || __instance.m_nview.IsValid() == false || nearby_pieces > ValConfig.PortalNearbyPiecesForActivation.Value) {
+                if (__instance.m_nview == null || __instance.m_nview.IsValid() == false || ValConfig.EnablePortalPieceRequirements.Value == false) {
                     return;
                 }
-                __result = false;
+
+                if (ValConfig.EnablePortalPieceRequirements.Value) {
+                    int current_pieces = GetCurrentPiecesForSpecificPortal(__instance.m_nview.GetZDO().m_uid.ID);
+                    if (current_pieces < ValConfig.PortalNearbyPiecesForActivation.Value) {
+                        __result = false;
+                    }
+                }
             }
+
+            [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.UseItem))]
+            [HarmonyPrefix]
+            internal static bool TeleportCost(TeleportWorld __instance, Humanoid user, ItemDrop.ItemData item, ref bool __result) {
+                if (__instance.m_nview == null || __instance.m_nview.IsValid() == false || ValConfig.EnablePortalRequireFuel.Value == false) {
+                    return true;
+                }
+                int fuel = __instance.m_nview.GetZDO().GetInt(fuelKey, 0);
+                if (item.m_dropPrefab != null && item.m_dropPrefab.name == ValConfig.PortalFuelPrefab.Value) {
+                    if (item.m_stack >= ValConfig.PortalFuelBatchSize.Value) {
+                        user.m_inventory.RemoveItemByPrefab(ValConfig.PortalFuelPrefab.Value, ValConfig.PortalFuelBatchSize.Value);
+                        fuel += ValConfig.PortalFuelUsagesPerBatch.Value;
+                        __instance.m_nview.GetZDO().Set(fuelKey, fuel);
+                        user.Message(MessageHud.MessageType.Center, $"Added {ValConfig.PortalFuelPrefab.Value}x{ValConfig.PortalFuelBatchSize.Value} for {ValConfig.PortalFuelUsagesPerBatch.Value} fuel.");
+                    } else {
+                        user.Message(MessageHud.MessageType.Center, $"Requires at least {ValConfig.PortalFuelPrefab.Value}x{ValConfig.PortalFuelBatchSize.Value}.");
+                    }
+                    __result = true;
+                    return false;
+                }
+                return true;
+            }
+
+            [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.Teleport))]
+            [HarmonyPostfix]
+            internal static void TeleportCost(TeleportWorld __instance) {
+                if (__instance.m_nview == null || __instance.m_nview.IsValid() == false || ValConfig.EnablePortalRequireFuel.Value == false) {
+                    return;
+                }
+                int fuel = __instance.m_nview.GetZDO().GetInt(fuelKey, 0);
+                if (fuel > 0) {
+                    fuel--;
+                    __instance.m_nview.GetZDO().Set(fuelKey, fuel);
+                    Logger.LogDebug("Consumed 1 usage of portal fuel.");
+                }
+            }
+
         }
     }
 }
