@@ -1,3 +1,12 @@
+**0.3.0**
+---
+```
+- Caching persistence for piece counts
+- Live updating of teleportable item display status (inventory icon will show as teleportable if allowed)
+- Improves compatibility with TargetPortal
+- Adds support for TargetPortals teleportation system (require fuel/pieces etc)
+```
+
 **0.2.0**
 ---
 ```

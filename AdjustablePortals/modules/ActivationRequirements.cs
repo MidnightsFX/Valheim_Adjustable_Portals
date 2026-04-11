@@ -1,11 +1,6 @@
 ﻿using AdjustablePortals.common;
 using HarmonyLib;
-using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 
 namespace AdjustablePortals.modules {
@@ -16,57 +11,108 @@ namespace AdjustablePortals.modules {
 
             private static readonly int pieceMask = LayerMask.GetMask("piece"); // "piece_nonsolid"
             private static readonly string fuelKey = "AJP_FUEL";
+            private static readonly string nearbyPiecesKey = "AJP_PORT_BUILD_NEARBY";
             private static float update_timer = 0f;
             private static float current_update_time = 0f;
 
             private static Dictionary<uint, int> nearbyPiecesByPortal = new Dictionary<uint, int>();
 
-            private static int GetCurrentPiecesForSpecificPortal(uint id) {
+            private static int GetCurrentPiecesForSpecificPortal(ZDO portalZDO) {
                 int current_pieces;
+                uint id = portalZDO.m_uid.ID;
                 if (nearbyPiecesByPortal.ContainsKey(id)) {
                     current_pieces = nearbyPiecesByPortal[id];
                 } else {
-                    current_pieces = 1;
+                    current_pieces = portalZDO.GetInt(nearbyPiecesKey, 1);
                     nearbyPiecesByPortal.Add(id, current_pieces);
                 }
                 return current_pieces;
             }
 
             [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.HaveTarget))]
-            [HarmonyPostfix]
-            internal static void Activator(TeleportWorld __instance, ref bool __result) {
-                if (__instance.m_nview == null || __instance.m_nview.IsValid() == false ) {
+            [HarmonyBefore("org.bepinex.plugins.targetportal")]
+            [HarmonyPrefix]
+            internal static bool Activator(TeleportWorld __instance, ref bool __result) {
+                return CheckActivationRequirements(__instance, ref __result);
+            }
+
+            public static void ConsumeFuel(TeleportWorld instance) {
+                if (instance.m_nview == null || !instance.m_nview.IsValid() || !ValConfig.EnablePortalRequireFuel.Value) {
                     return;
+                }
+                int fuel = instance.m_nview.GetZDO().GetInt(fuelKey, 0);
+                if (fuel > 0) {
+                    fuel--;
+                    instance.m_nview.GetZDO().Set(fuelKey, fuel);
+                    Logger.LogDebug("Consumed 1 usage of portal fuel.");
+                }
+            }
+
+            public static bool AreActivationRequirementsMet(TeleportWorld instance, out string reason) {
+                reason = "";
+                bool result = true;
+                if (instance.m_nview == null || !instance.m_nview.IsValid()) {
+                    return result;
                 }
 
                 // Piece requirements
                 if (ValConfig.EnablePortalPieceRequirements.Value) {
-                    uint id = __instance.m_nview.GetZDO().m_uid.ID;
-                    int current_pieces = GetCurrentPiecesForSpecificPortal(id);
+                    ZDO pzdo = instance.m_nview.GetZDO();
+                    int current_pieces = GetCurrentPiecesForSpecificPortal(pzdo);
 
                     current_update_time += UnityEngine.Time.fixedDeltaTime;
                     if (update_timer <= current_update_time) {
+                        current_pieces = instance.m_nview.GetZDO().GetInt(nearbyPiecesKey, 0);
                         // TODO: configurable duration for delta offset
                         //if (nearby_pieces >= ValConfig.PortalNearbyPiecesForActivation.Value) {
                         //    update_timer = current_update_time + 500;
                         //}
                         update_timer = current_update_time + 10;
-                        Collider[] nearbyPieces = Physics.OverlapSphere(__instance.transform.position, ValConfig.PortalPieceActivationDistance.Value, pieceMask);
+                        Collider[] nearbyPieces = Physics.OverlapSphere(instance.transform.position, ValConfig.PortalPieceActivationDistance.Value, pieceMask);
                         current_pieces = nearbyPieces.Length;
-                        nearbyPiecesByPortal[id] = current_pieces;
+                        nearbyPiecesByPortal[pzdo.m_uid.ID] = current_pieces;
+                        pzdo.Set(nearbyPiecesKey, current_pieces);
                     }
+                    //Logger.LogDebug($"Checking for portal piece requirement {current_pieces < ValConfig.PortalNearbyPiecesForActivation.Value}");
                     if (current_pieces < ValConfig.PortalNearbyPiecesForActivation.Value) {
-                        __result = false;
+                        reason = $"More nearby structures required ({current_pieces}/{ValConfig.PortalNearbyPiecesForActivation.Value})";
+                        result = false;
                     }
                 }
 
                 // Fuel requirements
                 if (ValConfig.EnablePortalRequireFuel.Value) {
-                    int fuel = __instance.m_nview.GetZDO().GetInt(fuelKey, 0);
+                    int fuel = instance.m_nview.GetZDO().GetInt(fuelKey, 0);
+                    //Logger.LogDebug($"Checking for portal fuel requirement {fuel == 0}");
                     if (fuel == 0) {
-                        __result = false;
+                        reason = $"Fuel is required, add {ValConfig.PortalFuelPrefab.Value} x {ValConfig.PortalFuelBatchSize.Value}";
+                        result = false;
                     }
                 }
+
+                return result;
+            }
+
+            public static bool CheckActivationRequirements(TeleportWorld __instance, ref bool __result) {
+                if (__instance.m_nview == null || __instance.m_nview.IsValid() == false) {
+                    return true; // Let the original run
+                }
+
+                if (!Compatibility.IsTargetPortalInstalled) {
+                    if (__instance.m_nview.GetZDO().GetConnectionZDOID(ZDOExtraData.ConnectionType.Portal) == ZDOID.None) {
+                        __result = false;
+                        return false;
+                    }
+                }
+
+                // Valid unless failing requirements
+                __result = AreActivationRequirementsMet(__instance, out string reason);
+                if (__result == false) {
+                    Logger.LogDebug($"Is portal active? {__result} {reason}");
+                }
+                
+                // Skip the original, 
+                return false;
             }
 
 
@@ -77,7 +123,7 @@ namespace AdjustablePortals.modules {
                     return;
                 }
                 if (ValConfig.EnablePortalPieceRequirements.Value) {
-                    int current_pieces = GetCurrentPiecesForSpecificPortal(__instance.m_nview.GetZDO().m_uid.ID);
+                    int current_pieces = GetCurrentPiecesForSpecificPortal(__instance.m_nview.GetZDO());
                     if (current_pieces < ValConfig.PortalNearbyPiecesForActivation.Value) {
                         __result += Localization.instance.Localize($"\nMore nearby structures required ({current_pieces}/{ValConfig.PortalNearbyPiecesForActivation.Value})");
                     }
@@ -101,12 +147,7 @@ namespace AdjustablePortals.modules {
                     return;
                 }
 
-                if (ValConfig.EnablePortalPieceRequirements.Value) {
-                    int current_pieces = GetCurrentPiecesForSpecificPortal(__instance.m_nview.GetZDO().m_uid.ID);
-                    if (current_pieces < ValConfig.PortalNearbyPiecesForActivation.Value) {
-                        __result = false;
-                    }
-                }
+                CheckActivationRequirements(__instance, ref __result);
             }
 
             [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.UseItem))]

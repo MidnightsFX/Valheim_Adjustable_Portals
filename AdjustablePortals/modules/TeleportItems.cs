@@ -2,9 +2,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 
 namespace AdjustablePortals.modules {
-    internal static class TeleportItems {
+    public static class TeleportItems {
 
         internal static List<string> EikthyrAllowedTeleports = new List<string>();
         internal static List<string> ElderAllowedTeleports = new List<string>();
@@ -13,6 +15,8 @@ namespace AdjustablePortals.modules {
         internal static List<string> YagluthAllowedTeleports = new List<string>();
         internal static List<string> QueenAllowedTeleports = new List<string>();
         internal static List<string> FaderAllowedTeleports = new List<string>();
+
+        static Dictionary<string, bool> PlayerItemsAllowTeleport = new Dictionary<string, bool>();
 
         // Initial loading of the config lists
         internal static void SetupTeleportLists() {
@@ -34,6 +38,7 @@ namespace AdjustablePortals.modules {
         internal static void FaderAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(FaderAllowedTeleports, ValConfig.DefeatedFaderAllowItems.Value); }
 
         private static void ConfigListChanged(List<string> targetList, string configValue) {
+            PlayerItemsAllowTeleport.Clear();
             try {
                 List<string> listEntry = new List<string>() { };
                 foreach (var item in configValue.Split(',')) {
@@ -56,78 +61,129 @@ namespace AdjustablePortals.modules {
                 // Nothing to do if the player is already allowed to teleport
                 if (__result == true) { return; }
 
-                List<string> playerNonTeleportableItems = __instance.m_inventory.GetAllItems().Where(x => x.m_shared.m_teleportable == false).Select(x => x.m_dropPrefab.name).Distinct().ToList();
+                List<ItemDrop.ItemData> playerNonTeleportableItems = __instance.m_inventory.GetAllItems().Where(x => x.m_shared.m_teleportable == false).Distinct().ToList();
                 //Logger.LogDebug($"Checking if the player can teleport the following items: {string.Join(", ", playerNonTeleportableItems)}");
+                List<string> playerItemsNotAllowed = new List<string>();
+                foreach (ItemDrop.ItemData item in playerNonTeleportableItems) {
+                    if (PerPlayerTeleportableItems.IsItemTeleportable(item) == false) {
+                        playerItemsNotAllowed.Add(item.m_dropPrefab.name);
+                    }
+                }
 
+                if (playerItemsNotAllowed.Count == 0) {
+                    __result = true;
+                } else {
+                    Logger.LogDebug($"The following items are not teleportable {string.Join(", ", playerItemsNotAllowed)}");
+                    __result = false;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(ZoneSystem))]
+        public static class ClearTeleportableCache {
+
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.SetGlobalKey), argumentTypes: new Type[] { typeof(string) })]
+            private static void ClearGlobalKeyReset(string name) {
+                PlayerItemsAllowTeleport.Clear();
+            }
+        }
+
+        [HarmonyPatch(typeof(Player))]
+        public static class ClearTeleportableCachePrivateKeys {
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(Player), nameof(Player.AddUniqueKey), argumentTypes: new Type[] { typeof(string) })]
+            private static void ClearPrivateKeyReset(string name) {
+                PlayerItemsAllowTeleport.Clear();
+            }
+        }
+
+        [HarmonyPatch(typeof(InventoryGrid))]
+        public static class PerPlayerTeleportableItems {
+
+            //[HarmonyEmitIL(".dump")]
+            [HarmonyTranspiler]
+            [HarmonyPatch(nameof(InventoryGrid.UpdateGui))]
+            static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions /*, ILGenerator generator*/) {
+                var codeMatcher = new CodeMatcher(instructions);
+                codeMatcher.MatchStartForward(
+                    new CodeMatch(OpCodes.Ldloc_S),
+                    new CodeMatch(OpCodes.Ldfld),
+                    new CodeMatch(OpCodes.Ldfld, AccessTools.Field(typeof(ItemDrop.ItemData.SharedData), nameof(ItemDrop.ItemData.SharedData.m_teleportable)))
+                ).RemoveInstructions(3).InsertAndAdvance(
+                    new CodeInstruction(OpCodes.Ldloc_S, 18),
+                    Transpilers.EmitDelegate(IsItemTeleportable)
+                ).ThrowIfNotMatch("Unable to patch item teleport visual display.");
+
+                return codeMatcher.Instructions();
+            }
+
+            public static bool IsItemTeleportable(ItemDrop.ItemData item) {
+                if (item == null || item.m_shared == null || item.m_dropPrefab == null) {
+                    return true;
+                }
+                string itemPrefab = item.m_dropPrefab.name;
+
+                if (PlayerItemsAllowTeleport.ContainsKey(itemPrefab)) {
+                    return PlayerItemsAllowTeleport[itemPrefab];
+                }
+
+                bool teleportable = item.m_shared.m_teleportable;
                 // Eikthyr
-                if (ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_eikthyr)) {
-                    foreach (string item in EikthyrAllowedTeleports) {
-                        if (playerNonTeleportableItems.Contains(item)) {
-                            playerNonTeleportableItems.Remove(item);
-                        }
+                if (teleportable == false && ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_eikthyr)) {
+                    if (EikthyrAllowedTeleports.Contains(itemPrefab)) {
+                        teleportable = true;
                     }
                 }
 
                 // Elder
-                if (ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_gdking)) {
-                    foreach (string item in ElderAllowedTeleports) {
-                        if (playerNonTeleportableItems.Contains(item)) {
-                            playerNonTeleportableItems.Remove(item);
-                        }
+                if (teleportable == false && ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_gdking)) {
+                    if (ElderAllowedTeleports.Contains(itemPrefab)) {
+                        teleportable = true;
                     }
                 }
 
                 // Bonemass
-                if (ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_bonemass)) {
-                    foreach (string item in BonemassAllowedTeleports) {
-                        if (playerNonTeleportableItems.Contains(item)) {
-                            playerNonTeleportableItems.Remove(item);
-                        }
+                if (teleportable == false && ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_bonemass)) {
+                    if (BonemassAllowedTeleports.Contains(itemPrefab)) {
+                        teleportable = true;
                     }
                 }
 
                 // Moder
-                if (ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_dragon)) {
-                    foreach (string item in ModerAllowedTeleports) {
-                        if (playerNonTeleportableItems.Contains(item)) {
-                            playerNonTeleportableItems.Remove(item);
-                        }
+                if (teleportable == false && ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_dragon)) {
+                    if (ModerAllowedTeleports.Contains(itemPrefab)) {
+                        teleportable = true;
                     }
                 }
 
                 // Yagluth
-                if (ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_goblinking)) {
-                    foreach (string item in YagluthAllowedTeleports) {
-                        if (playerNonTeleportableItems.Contains(item)) {
-                            playerNonTeleportableItems.Remove(item);
-                        }
+                if (teleportable == false && ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_goblinking)) {
+                    if (YagluthAllowedTeleports.Contains(itemPrefab)) {
+                        teleportable = true;
                     }
                 }
 
                 // Queen
-                if (ZoneSystem.instance.GetGlobalKey("defeated_queen")) {
-                    foreach (string item in QueenAllowedTeleports) {
-                        if (playerNonTeleportableItems.Contains(item)) {
-                            playerNonTeleportableItems.Remove(item);
-                        }
+                if (teleportable == false && ZoneSystem.instance.GetGlobalKey("defeated_queen")) {
+                    if (QueenAllowedTeleports.Contains(itemPrefab)) {
+                        teleportable = true;
                     }
                 }
 
                 // Fader
-                if (ZoneSystem.instance.GetGlobalKey("defeated_fader")) {
-                    foreach (string item in FaderAllowedTeleports) {
-                        if (playerNonTeleportableItems.Contains(item)) {
-                            playerNonTeleportableItems.Remove(item);
-                        }
+                if (teleportable == false && ZoneSystem.instance.GetGlobalKey("defeated_fader")) {
+                    if (FaderAllowedTeleports.Contains(itemPrefab)) {
+                        teleportable = true;
                     }
                 }
 
-                if (playerNonTeleportableItems.Count == 0) {
-                    __result = true;
-                } else {
-                    Logger.LogDebug($"The following items are not teleportable {string.Join(", ", playerNonTeleportableItems)}");
-                    __result = false;
+
+                Logger.LogInfo($"Item is teleportable? {itemPrefab} - {teleportable}");
+                if (PlayerItemsAllowTeleport.ContainsKey(itemPrefab) == false) {
+                    PlayerItemsAllowTeleport.Add(itemPrefab, teleportable);
                 }
+                return false;
             }
         }
     }
