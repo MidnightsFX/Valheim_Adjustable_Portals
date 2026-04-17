@@ -179,7 +179,7 @@ namespace AdjustablePortals.modules {
                 }
 
 
-                Logger.LogInfo($"Item is teleportable? {itemPrefab} - {teleportable}");
+                Logger.LogDebug($"Item is teleportable? {itemPrefab} - {teleportable}");
                 if (PlayerItemsAllowTeleport.ContainsKey(itemPrefab) == false) {
                     PlayerItemsAllowTeleport.Add(itemPrefab, teleportable);
                 }
