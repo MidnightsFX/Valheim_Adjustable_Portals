@@ -19,7 +19,7 @@ publish:
 
   thunderstore:
     enabled: true
-    author_name: MidnightMods          # the Thunderstore TEAM, not your username
+    author_name: MidnightMods
     communities: [valheim]
     categories: []                    # optional
     has_nsfw_content: false           # optional, default false
