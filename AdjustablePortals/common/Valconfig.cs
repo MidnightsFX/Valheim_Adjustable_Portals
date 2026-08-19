@@ -48,7 +48,7 @@ namespace AdjustablePortals {
             EnableDebugMode.SettingChanged += Logger.enableDebugLogging;
 
             EnablePortalPieceRequirements = BindServerConfig("PortalActivation", "EnablePortalPieceRequirements", true, "When enabled, portals require a set number of building pieces around them in order to activate");
-            PortalNearbyPiecesForActivation = BindServerConfig("PortalActivation", "PortalNearbyPiecesForActivation", 1000, "The number of building pieces required nearby in order for a portal to be activated.", false, 0, 10000);
+            PortalNearbyPiecesForActivation = BindServerConfig("PortalActivation", "PortalNearbyPiecesForActivation", 300, "The number of building pieces required nearby in order for a portal to be activated.", false, 0, 10000);
             PortalPieceActivationDistance = BindServerConfig("PortalActivation", "PortalPieceActivationDistance", 100f, "The distance that will be checked for nearby building pieces to meet the required structures nearby.");
 
             EnablePortalRequireFuel = BindServerConfig("PortalActivation", "EnablePortalRequireFuel", false, "When enabled, portals require a fuel item to teleport users");
@@ -77,21 +77,25 @@ namespace AdjustablePortals {
 
 
 
+        // Held statically so the watcher is not collected while the game is running.
+        private static FileSystemWatcher configWatcher;
+
         internal static void SetupMainFileWatcher() {
             // Setup a file watcher to detect changes to the config file
-            FileSystemWatcher watcher = new FileSystemWatcher();
-            watcher.NotifyFilter = NotifyFilters.LastWrite;
-            watcher.Path = Path.GetDirectoryName(cfg.ConfigFilePath);
+            configWatcher = new FileSystemWatcher();
+            configWatcher.NotifyFilter = NotifyFilters.LastWrite;
+            configWatcher.Path = Path.GetDirectoryName(cfg.ConfigFilePath);
             // Ignore changes to other files
-            watcher.Filter = "MidnightsFX.ImpactfulSkills.cfg";
-            watcher.Changed += OnConfigFileChanged;
-            watcher.SynchronizingObject = ThreadingHelper.SynchronizingObject;
-            watcher.EnableRaisingEvents = true;
+            configWatcher.Filter = Path.GetFileName(cfg.ConfigFilePath);
+            configWatcher.Changed += OnConfigFileChanged;
+            configWatcher.SynchronizingObject = ThreadingHelper.SynchronizingObject;
+            configWatcher.EnableRaisingEvents = true;
         }
 
         private static void OnConfigFileChanged(object sender, FileSystemEventArgs e) {
             // We only want the config changes being allowed if this is a server (ie in game in a hosted world or dedicated ideally)
-            if (ZNet.instance.IsServer() == false) {
+            // ZNet does not exist at the main menu, where the file can still be edited.
+            if (ZNet.instance == null || ZNet.instance.IsServer() == false) {
                 return;
             }
             // Handle the config file change event

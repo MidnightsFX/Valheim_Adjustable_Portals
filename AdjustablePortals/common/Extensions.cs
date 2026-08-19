@@ -1,43 +1,56 @@
-﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using UnityEngine;
 
 namespace AdjustablePortals.common {
     internal static class Extensions {
+
+        /// <summary>
+        /// Total number of items across the inventory whose drop prefab matches <paramref name="prefab"/>.
+        /// Inventory.CountItems matches on the shared display name, which is not what this mod keys on.
+        /// </summary>
+        public static int CountItemsByPrefab(this Inventory inv, string prefab) {
+            int total = 0;
+            foreach (ItemDrop.ItemData user_item in inv.GetAllItems()) {
+                if (user_item.m_dropPrefab != null && user_item.m_dropPrefab.name == prefab && user_item.m_stack > 0) {
+                    total += user_item.m_stack;
+                }
+            }
+            return total;
+        }
+
+        /// <summary>
+        /// Removes <paramref name="countToRemove"/> items matching <paramref name="prefab"/>, drawing
+        /// across stacks. Returns false and removes nothing when the inventory cannot cover the cost.
+        /// </summary>
         public static bool RemoveItemByPrefab(this Inventory inv, string prefab, int countToRemove) {
-            List<ItemDrop.ItemData> user_inventory = inv.GetAllItems();
-            int remaining = countToRemove;
-            List<ItemDrop.ItemData> itemsToRemove = new List<ItemDrop.ItemData>();
-            foreach (ItemDrop.ItemData user_item in user_inventory) {
-                //Logger.LogDebug($"Comparing {user_item.m_dropPrefab.name} to {prefab} match? {user_item.m_dropPrefab.name == prefab}");
-                if (user_item.m_dropPrefab.name == prefab) {
-                    //Logger.LogDebug($"stack {user_item.m_stack} > 0 = {user_item.m_stack > 0}");
-                    if (user_item.m_stack > 0) {
-                        if (remaining >= user_item.m_stack) {
-                            if (user_item.m_stack <= remaining) {
-                                itemsToRemove.Add(user_item);
-                                remaining -= user_item.m_stack;
-                            } else {
-                                user_item.m_stack -= remaining;
-                                remaining = 0;
-                            }
-                        } else {
-                            user_item.m_stack -= remaining;
-                            break;
-                        }
-                    } else {
-                        // zero sized or less than zero size stacks are invalid and should be removed regardless
-                        // but it doesn't count towards the tribute contribution you monster
-                        itemsToRemove.Add(user_item);
-                    }
+            if (countToRemove <= 0) {
+                return true;
+            }
+            if (inv.CountItemsByPrefab(prefab) < countToRemove) {
+                Logger.LogDebug($"Remove summary: {prefab}x{countToRemove} not available, removing nothing.");
+                return false;
+            }
+
+            // Snapshot first: Inventory.RemoveItem mutates the list GetAllItems hands back.
+            List<ItemDrop.ItemData> matching = new List<ItemDrop.ItemData>();
+            foreach (ItemDrop.ItemData user_item in inv.GetAllItems()) {
+                if (user_item.m_dropPrefab != null && user_item.m_dropPrefab.name == prefab && user_item.m_stack > 0) {
+                    matching.Add(user_item);
                 }
             }
 
-            foreach (ItemDrop.ItemData item in itemsToRemove) {
-                inv.RemoveItem(item);
+            int remaining = countToRemove;
+            foreach (ItemDrop.ItemData user_item in matching) {
+                if (remaining <= 0) {
+                    break;
+                }
+                // Handles both the whole-stack and partial-stack cases, and marks the inventory
+                // changed so the GUI and save state keep up.
+                int taken = Mathf.Min(user_item.m_stack, remaining);
+                inv.RemoveItem(user_item, taken);
+                remaining -= taken;
             }
+
             Logger.LogDebug($"Remove summary: {prefab}x{countToRemove} successfully removed: {countToRemove - remaining}");
             return remaining == 0;
         }

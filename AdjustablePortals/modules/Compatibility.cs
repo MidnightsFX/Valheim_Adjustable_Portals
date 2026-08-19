@@ -10,6 +10,10 @@ namespace AdjustablePortals.modules {
 
         public static bool IsTargetPortalInstalled = false;
         private static TeleportWorld activeSourcePortal = null;
+        private static float activeSourcePortalExpiry = 0f;
+        // A player who opens the portal map and then closes it never teleports. Without an expiry
+        // the stale reference would charge that portal for whatever teleport happened next.
+        private const float ActiveSourcePortalLifetime = 30f;
 
         internal static void CheckModCompat() {
             try {
@@ -58,16 +62,25 @@ namespace AdjustablePortals.modules {
             }
 
             if (ActivationRequirements.PortalInstanceActivatable.AreActivationRequirementsMet(__0.m_teleportWorld, out string reason) == false) {
-                Player.m_localPlayer.Message(MessageHud.MessageType.Center, reason);
+                if (Player.m_localPlayer != null) {
+                    Player.m_localPlayer.Message(MessageHud.MessageType.Center, reason);
+                }
                 return false; // Skip TargetPortal's Prefix body - map will not open
             }
 
             activeSourcePortal = __0.m_teleportWorld;
+            activeSourcePortalExpiry = Time.time + ActiveSourcePortalLifetime;
             return true;
         }
 
         private static void TeleportToPostfix(Player __instance) {
             if (__instance != Player.m_localPlayer || activeSourcePortal == null) {
+                return;
+            }
+            // Expired means the player walked away from the map instead of picking a destination,
+            // so whatever moved them just now was not this portal.
+            if (Time.time > activeSourcePortalExpiry) {
+                activeSourcePortal = null;
                 return;
             }
             ActivationRequirements.PortalInstanceActivatable.ConsumeFuel(activeSourcePortal);

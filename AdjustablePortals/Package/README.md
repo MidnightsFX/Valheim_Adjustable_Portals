@@ -6,7 +6,7 @@ This mod aims to make portal progression more gradual, and encourage portals onl
 ## Features
 
 **Portal Requirements**
-- Portals can require a configurable number of building pieces nearby to become functional (default 2000, configurable)
+- Portals can require a configurable number of building pieces nearby to become functional (default 300, configurable)
 - Portals can require a fuel to operate on (configurable), default is surtling codes 1 core = 20 teleports (cost only taken from source portal).
 
 **Portal Item Teleportation progression**

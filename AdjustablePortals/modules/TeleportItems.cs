@@ -79,21 +79,24 @@ namespace AdjustablePortals.modules {
             }
         }
 
+        // SetGlobalKey only fires a routed RPC on the caller; every other client learns about a new
+        // key through RPC_GlobalKeys -> GlobalKeyAdd. Patching the methods that actually mutate the
+        // key collections is what makes a boss kill invalidate the cache everywhere rather than
+        // only for whoever landed the last hit.
         [HarmonyPatch(typeof(ZoneSystem))]
         public static class ClearTeleportableCache {
 
             [HarmonyPostfix]
-            [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.SetGlobalKey), argumentTypes: new Type[] { typeof(string) })]
-            private static void ClearGlobalKeyReset(string name) {
+            [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.GlobalKeyAdd), argumentTypes: new Type[] { typeof(string), typeof(bool) })]
+            private static void GlobalKeyAdded(string keyStr) {
                 PlayerItemsAllowTeleport.Clear();
             }
-        }
 
-        [HarmonyPatch(typeof(Player))]
-        public static class ClearTeleportableCachePrivateKeys {
+            // Covers removals too: RPC_GlobalKeys clears and re-adds, so a key that went away shows
+            // up here rather than in the add patch above.
             [HarmonyPostfix]
-            [HarmonyPatch(typeof(Player), nameof(Player.AddUniqueKey), argumentTypes: new Type[] { typeof(string) })]
-            private static void ClearPrivateKeyReset(string name) {
+            [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.ClearGlobalKeys))]
+            private static void GlobalKeysCleared() {
                 PlayerItemsAllowTeleport.Clear();
             }
         }
@@ -179,11 +182,11 @@ namespace AdjustablePortals.modules {
                 }
 
 
-                Logger.LogDebug($"Item is teleportable? {itemPrefab} - {teleportable}");
+                //Logger.LogDebug($"Item is teleportable? {itemPrefab} - {teleportable}");
                 if (PlayerItemsAllowTeleport.ContainsKey(itemPrefab) == false) {
                     PlayerItemsAllowTeleport.Add(itemPrefab, teleportable);
                 }
-                return false;
+                return teleportable;
             }
         }
     }
