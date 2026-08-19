@@ -75,14 +75,26 @@ namespace AdjustablePortals.modules {
                 return CheckActivationRequirements(__instance, ref __result);
             }
 
+            // One teleport can reach ConsumeFuel from two directions - the Teleport postfix below and
+            // the Player.TeleportTo postfix the TargetPortal compatibility layer installs. Both land
+            // in the same frame, so latching on the frame collapses them into a single charge
+            // without either side needing to know whether the other ran.
+            private static TeleportWorld lastFuelChargePortal = null;
+            private static int lastFuelChargeFrame = -1;
+
             public static void ConsumeFuel(TeleportWorld instance) {
                 if (instance == null || instance.m_nview == null || !instance.m_nview.IsValid() || !ValConfig.EnablePortalRequireFuel.Value) {
+                    return;
+                }
+                if (lastFuelChargePortal == instance && lastFuelChargeFrame == Time.frameCount) {
                     return;
                 }
                 int fuel = instance.m_nview.GetZDO().GetInt(fuelKey, 0);
                 if (fuel <= 0) {
                     return;
                 }
+                lastFuelChargePortal = instance;
+                lastFuelChargeFrame = Time.frameCount;
                 // Only the owner's writes replicate; without this the charge is spent locally and
                 // reappears the next time the owner's copy of the ZDO comes back around.
                 instance.m_nview.ClaimOwnership();
@@ -196,7 +208,7 @@ namespace AdjustablePortals.modules {
                 if (__instance.m_nview == null || __instance.m_nview.IsValid() == false || ValConfig.EnablePortalRequireFuel.Value == false) {
                     return true;
                 }
-                if (item == null || item.m_dropPrefab == null || item.m_dropPrefab.name != ValConfig.PortalFuelPrefab.Value) {
+                if (user == null || user.m_inventory == null || item == null || item.m_dropPrefab == null || item.m_dropPrefab.name != ValConfig.PortalFuelPrefab.Value) {
                     return true;
                 }
 
@@ -236,14 +248,26 @@ namespace AdjustablePortals.modules {
                 ConsumeFuel(__instance);
             }
 
-            // ZDOIDs are not stable across sessions, so the piece cache must not survive one.
-            [HarmonyPatch(typeof(ZNetScene), nameof(ZNetScene.Shutdown))]
-            [HarmonyPostfix]
             internal static void ClearPortalPieceCache() {
                 nearbyPiecesByPortal.Clear();
                 scanBuffer.Clear();
+                lastFuelChargePortal = null;
+                lastFuelChargeFrame = -1;
             }
 
+        }
+
+        // ZDOIDs are not stable across sessions, so none of the per-portal state may survive one.
+        // Separate class rather than a method on the one above, whose class-level attribute scopes
+        // it to TeleportWorld.
+        [HarmonyPatch(typeof(ZNetScene))]
+        internal static class PortalCacheLifetime {
+
+            [HarmonyPatch(nameof(ZNetScene.Shutdown))]
+            [HarmonyPostfix]
+            private static void OnShutdown() {
+                PortalInstanceActivatable.ClearPortalPieceCache();
+            }
         }
     }
 }
