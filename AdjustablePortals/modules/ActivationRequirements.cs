@@ -17,6 +17,15 @@ namespace AdjustablePortals.modules {
             // A portal that has just come into view uses its persisted count for this long, giving
             // the surrounding zone a chance to finish streaming in before the first real count.
             private const float InitialGraceSeconds = 5f;
+            // A zone load seeds every portal it contains on the same frame, and a fixed interval
+            // would then keep them phase locked forever - every portal in the base recounting on
+            // one frame, every interval. Only the first deadline needs spreading: the fixed
+            // interval after that preserves whatever spread this hands out.
+            private const float InitialScanSpreadSeconds = ScanIntervalSeconds;
+            // A loaded portal is asked for a count twice a second, so a deadline this far in the
+            // past means the portal unloaded.
+            private const float StaleEntrySeconds = 60f;
+            private const float PruneIntervalSeconds = 60f;
 
             private struct PortalPieceState {
                 public int Pieces;
@@ -26,8 +35,10 @@ namespace AdjustablePortals.modules {
             // Keyed on the whole ZDOID. ZDOID.ID is only unique per user, so keying on it alone
             // lets two different players' portals collide and share a piece count.
             private static readonly Dictionary<ZDOID, PortalPieceState> nearbyPiecesByPortal = new Dictionary<ZDOID, PortalPieceState>();
-            // Reused between counts so the per-scan query does not allocate.
-            private static readonly List<Piece> scanBuffer = new List<Piece>();
+            private static float nextPruneTime = 0f;
+            // Reused, and separate from the walk that fills it because a Dictionary cannot be
+            // written to while it is being enumerated.
+            private static readonly List<ZDOID> pruneBuffer = new List<ZDOID>();
 
             /// <summary>
             /// Nearby-piece count for one portal, recounted at most once every
@@ -47,16 +58,18 @@ namespace AdjustablePortals.modules {
                     // First sight this session. Seed from the persisted count and hold it briefly
                     // rather than counting a half-loaded zone.
                     state.Pieces = pzdo.GetInt(nearbyPiecesKey, 0);
-                    state.NextScanTime = Time.time + InitialGraceSeconds;
+                    state.NextScanTime = Time.time + InitialGraceSeconds + Random.Range(0f, InitialScanSpreadSeconds);
                     nearbyPiecesByPortal[id] = state;
                     return state.Pieces;
                 }
 
-                scanBuffer.Clear();
-                Piece.GetAllPiecesInRadius(instance.transform.position, ValConfig.PortalPieceActivationDistance.Value, scanBuffer);
-                state.Pieces = scanBuffer.Count;
+                PruneUnloadedPortals();
+
+                // Counted against a shared snapshot rather than Piece.GetAllPiecesInRadius, which
+                // walks every loaded piece in the process on behalf of this one portal. See
+                // PieceProximity for what that costs and what it trades away.
+                state.Pieces = PieceProximity.CountWithin(instance.transform.position, ValConfig.PortalPieceActivationDistance.Value);
                 state.NextScanTime = Time.time + ScanIntervalSeconds;
-                scanBuffer.Clear();
                 nearbyPiecesByPortal[id] = state;
 
                 // Only the owner's ZDO writes replicate, so for everyone else this stays an
@@ -66,6 +79,34 @@ namespace AdjustablePortals.modules {
                 }
 
                 return state.Pieces;
+            }
+
+            /// <summary>
+            /// Drops entries for portals nobody has asked about in a long time. Without this the
+            /// cache only ever grows until ZNetScene.Shutdown, holding a count for every portal
+            /// visited all session.
+            /// </summary>
+            /// <remarks>
+            /// A portal that does come back re-seeds from its own ZDO, so pruning one that was
+            /// merely quiet costs a single grace period and nothing else.
+            /// </remarks>
+            private static void PruneUnloadedPortals() {
+                if (Time.time < nextPruneTime) {
+                    return;
+                }
+                nextPruneTime = Time.time + PruneIntervalSeconds;
+
+                float cutoff = Time.time - StaleEntrySeconds;
+                pruneBuffer.Clear();
+                foreach (KeyValuePair<ZDOID, PortalPieceState> entry in nearbyPiecesByPortal) {
+                    if (entry.Value.NextScanTime < cutoff) {
+                        pruneBuffer.Add(entry.Key);
+                    }
+                }
+                for (int i = 0; i < pruneBuffer.Count; i++) {
+                    nearbyPiecesByPortal.Remove(pruneBuffer[i]);
+                }
+                pruneBuffer.Clear();
             }
 
             [HarmonyPatch(typeof(TeleportWorld), nameof(TeleportWorld.HaveTarget))]
@@ -133,6 +174,15 @@ namespace AdjustablePortals.modules {
             public static bool CheckActivationRequirements(TeleportWorld __instance, ref bool __result) {
                 if (__instance.m_nview == null || __instance.m_nview.IsValid() == false) {
                     return true; // Let the original run
+                }
+
+                // Nothing configured to gate on, so this prefix has nothing to add - hand the call
+                // back rather than reimplementing HaveTarget's connection test below. Mirrors the
+                // early return in TargetFoundPrevention. Safe either way on TargetPortal: without
+                // it, vanilla HaveTarget is exactly the connection test below, and with it, its own
+                // HaveTarget prefix forces true, which is what this method returns here anyway.
+                if (ValConfig.EnablePortalPieceRequirements.Value == false && ValConfig.EnablePortalRequireFuel.Value == false) {
+                    return true;
                 }
 
                 if (!Compatibility.IsTargetPortalInstalled) {
@@ -250,7 +300,9 @@ namespace AdjustablePortals.modules {
 
             internal static void ClearPortalPieceCache() {
                 nearbyPiecesByPortal.Clear();
-                scanBuffer.Clear();
+                pruneBuffer.Clear();
+                nextPruneTime = 0f;
+                PieceProximity.Clear();
                 lastFuelChargePortal = null;
                 lastFuelChargeFrame = -1;
             }

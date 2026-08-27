@@ -1,3 +1,18 @@
+**0.3.2**
+---
+```
+- Nearby piece counts no longer scan every loaded building piece in the world once per portal. A
+  base with many portals was paying that scan for each of them, and the scan ignored the configured
+  distance - it always walked the whole list. Counts now come from a shared position snapshot, and
+  the cost no longer grows with the number of portals.
+- Portals no longer all recount on the same frame. Every portal in a zone was seeded together and
+  stayed in lockstep for the rest of the session, turning the recount into a periodic stall.
+- Nearby piece counts for portals that have unloaded are now released instead of being held until
+  you leave the world.
+- Portal activation no longer detours through this mod at all when both nearby piece and fuel
+  requirements are disabled.
+```
+
 **0.3.1**
 ---
 ```
