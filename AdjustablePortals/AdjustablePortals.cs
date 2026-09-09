@@ -17,7 +17,7 @@ namespace AdjustablePortals
     {
         public const string PluginGUID = "MidnightsFX.AdjustablePortals";
         public const string PluginName = "AdjustablePortals";
-        public const string PluginVersion = "0.3.2";
+        public const string PluginVersion = "0.3.3";
         internal static Harmony Harmony = new Harmony(PluginGUID);
 
         public static CustomLocalization Localization = LocalizationManager.Instance.GetLocalization();

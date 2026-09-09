@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -41,6 +42,20 @@ namespace AdjustablePortals.common {
         // Keyed on the packed x/z cell, see CellKey.
         private static readonly Dictionary<long, List<Vector3>> cells = new Dictionary<long, List<Vector3>>();
 
+        // What a rebuild needs from one piece, so that the two properties which resolve a native
+        // object back to its managed wrapper are paid for once per piece rather than once per
+        // rebuild. See the point of use for why holding these stays correct.
+        private struct PieceRefs {
+            public Piece Piece;
+            public GameObject GameObject;
+            public Transform Transform;
+        }
+
+        // Indexed in lockstep with Piece.s_allPieces, which is the whole trick: an entry is only
+        // trusted while the piece at that index is still the piece it was built from.
+        private static PieceRefs[] known = Array.Empty<PieceRefs>();
+        private static int knownCount = 0;
+
         private static float nextRebuildTime = 0f;
         private static bool built = false;
 
@@ -49,14 +64,16 @@ namespace AdjustablePortals.common {
         /// refreshing the shared snapshot first if it has aged out.
         /// </summary>
         internal static int CountWithin(Vector3 center, float radius) {
-            RebuildIfStale();
-
-            // Vanilla's test is "distance < radius", which nothing can satisfy at zero. Guarding
-            // rather than leaning on the comparison, because squaring would turn a negative radius
-            // into a positive threshold that matches everything.
+            // Guarded ahead of the rebuild rather than after it, because at a non-positive radius
+            // the answer is zero whatever the snapshot holds, so there is nothing to refresh it
+            // for. Vanilla's test is "distance < radius", which nothing can satisfy at zero, and
+            // leaning on the comparison instead would turn a negative radius into a positive
+            // squared threshold that matches everything.
             if (radius <= 0f) {
                 return 0;
             }
+
+            RebuildIfStale();
 
             float radiusSq = radius * radius;
             int minX = CellIndex(center.x - radius);
@@ -97,6 +114,11 @@ namespace AdjustablePortals.common {
         /// </summary>
         internal static void Clear() {
             cells.Clear();
+            // Nulled rather than dropped, so the array keeps its capacity into the next world - but
+            // nulled rather than merely forgotten, because a live reference to a destroyed piece's
+            // wrapper is the thing the buckets store bare positions to avoid.
+            Array.Clear(known, 0, knownCount);
+            knownCount = 0;
             nextRebuildTime = 0f;
             built = false;
         }
@@ -106,7 +128,8 @@ namespace AdjustablePortals.common {
         /// switched off, or no portal loaded, nothing in this class ever runs.
         /// </summary>
         private static void RebuildIfStale() {
-            if (built && Time.time < nextRebuildTime) {
+            float now = Time.time;
+            if (built && now < nextRebuildTime) {
                 return;
             }
 
@@ -122,32 +145,99 @@ namespace AdjustablePortals.common {
             // the loop below has nothing to iterate and the value is never used.
             int ghostLayer = Piece.s_ghostLayer;
             List<Piece> allPieces = Piece.s_allPieces;
-            for (int i = 0; i < allPieces.Count; i++) {
+            int count = allPieces.Count;
+
+            if (known.Length < count) {
+                // Resized rather than replaced: the entries are only worth anything while they stay
+                // lined up with s_allPieces' indices, so they have to survive the growth.
+                Array.Resize(ref known, Mathf.Max(count, known.Length * 2));
+            }
+
+            // s_allPieces is filled in zone load order, so runs of consecutive pieces usually land
+            // in the same cell. Holding on to the last bucket turns most of the dictionary probes
+            // into a long compare.
+            long lastKey = 0;
+            List<Vector3> lastBucket = null;
+
+            for (int i = 0; i < count; i++) {
                 Piece piece = allPieces[i];
-                // The same predicate Piece.GetAllPiecesInRadius uses. The placement ghost the
+
+                // Component.gameObject and Component.transform each have to map a native object
+                // back to its managed wrapper, and at one of each per piece per rebuild that was
+                // the bulk of what a rebuild cost. Neither can change over a Piece's lifetime, so
+                // the pair is worth keeping; the only question is whether this slot still describes
+                // this piece, and ReferenceEquals answers it without going near UnityEngine.Object's
+                // ==, which runs its own native liveness check and would hand the cost straight
+                // back.
+                //
+                // Churn is cheap here rather than ruinous: Piece.OnDestroy swap removes, writing
+                // one slot and shortening the list, so a destroyed piece invalidates exactly one
+                // entry. New pieces append past the end and are resolved once.
+                GameObject gameObject;
+                Transform transform;
+                if (ReferenceEquals(known[i].Piece, piece)) {
+                    gameObject = known[i].GameObject;
+                    transform = known[i].Transform;
+                } else {
+                    gameObject = piece.gameObject;
+                    transform = piece.transform;
+                    known[i].Piece = piece;
+                    known[i].GameObject = gameObject;
+                    known[i].Transform = transform;
+                }
+
+                // The same predicate Piece.GetAllPiecesInRadius uses, and still read off the object
+                // every rebuild rather than cached beside the wrappers, so a piece whose layer
+                // changes under us is picked up exactly as it was before. The placement ghost the
                 // player is holding lives in s_allPieces too - Player.SetupPlacementGhost
                 // instantiates the real prefab and only moves it onto the ghost layer afterwards -
                 // and counting it would make every count near a player jitter by one whenever a
                 // hammer is out.
-                if (piece.gameObject.layer == ghostLayer) {
+                if (gameObject.layer == ghostLayer) {
                     continue;
                 }
 
-                Vector3 position = piece.transform.position;
+                Vector3 position = transform.position;
                 long key = CellKey(CellIndex(position.x), CellIndex(position.z));
+                if (lastBucket != null && key == lastKey) {
+                    lastBucket.Add(position);
+                    continue;
+                }
+
                 if (cells.TryGetValue(key, out List<Vector3> bucket) == false) {
-                    bucket = new List<Vector3>();
+                    // Sized past the 1-2-4 growth an empty list would walk through, because the
+                    // rebuilds that create cells are the ones running while a zone streams in,
+                    // which are the rebuilds least able to afford the copies.
+                    bucket = new List<Vector3>(16);
                     cells[key] = bucket;
                 }
                 bucket.Add(position);
+                lastKey = key;
+                lastBucket = bucket;
             }
 
-            nextRebuildTime = Time.time + SnapshotLifetimeSeconds;
+            // Slots past the live count describe pieces that have since been destroyed, and each
+            // one holds their GameObject and Transform wrappers alive for nothing. Same reason the
+            // buckets hold positions instead of Pieces.
+            for (int i = count; i < knownCount; i++) {
+                known[i] = default;
+            }
+            knownCount = count;
+
+            nextRebuildTime = now + SnapshotLifetimeSeconds;
             built = true;
 
             // Rebuilding in one pass rather than spreading it over frames is deliberate:
             // Piece.OnDestroy swap removes from s_allPieces, so a partial walk of a list being
             // reordered underneath it can count a piece twice or miss one entirely.
+            //
+            // Steering which frame that one pass lands on - holding it back off frames that are
+            // already running long, so it does not stack onto a zone streaming in - was tried and
+            // is not worth it. A rebuild is one frame in ten seconds, so even with a tenth of the
+            // wall clock inside a streaming burst only about a tenth of rebuilds coincide with one,
+            // and deferring buys back well under half of those while pushing the worst snapshot age
+            // from eight seconds to eleven. Making the pass itself cheaper, which is what the
+            // per piece caching above does, is the part that pays.
         }
 
         private static int CellIndex(float world) {

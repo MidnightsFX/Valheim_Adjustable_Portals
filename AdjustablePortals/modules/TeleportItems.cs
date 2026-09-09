@@ -61,6 +61,15 @@ namespace AdjustablePortals.modules {
                 // Nothing to do if the player is already allowed to teleport
                 if (__result == true) { return; }
 
+                // Vanilla refuses these outright, ahead of both allowAllItems and the TeleportAll
+                // global key, so it is not a restriction this mod is meant to lift. Nothing below
+                // would catch it either: the scan only considers items flagged m_teleportable
+                // false, and an item blocked purely on tool tier is usually not one of them, so
+                // the allow list comes back empty and reads as "all clear".
+                if (__instance.m_inventory.GetAllItems().Any(x => x.m_shared.m_toolTier >= 1000)) {
+                    return;
+                }
+
                 List<ItemDrop.ItemData> playerNonTeleportableItems = __instance.m_inventory.GetAllItems().Where(x => x.m_shared.m_teleportable == false).Distinct().ToList();
                 //Logger.LogDebug($"Checking if the player can teleport the following items: {string.Join(", ", playerNonTeleportableItems)}");
                 List<string> playerItemsNotAllowed = new List<string>();
@@ -109,14 +118,28 @@ namespace AdjustablePortals.modules {
             [HarmonyPatch(nameof(InventoryGrid.UpdateGui))]
             static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions /*, ILGenerator generator*/) {
                 var codeMatcher = new CodeMatcher(instructions);
+
+                // Vanilla computes `!item.m_shared.m_teleportable`, which is these three
+                // instructions: load the loop's item local, then the two field loads. Swap the
+                // whole expression for IsItemTeleportable(item) - note the inverted sense, which
+                // the surrounding vanilla `!` restores.
                 codeMatcher.MatchStartForward(
-                    new CodeMatch(OpCodes.Ldloc_S),
+                    new CodeMatch(instruction => instruction.IsLdloc()),
                     new CodeMatch(OpCodes.Ldfld),
                     new CodeMatch(OpCodes.Ldfld, AccessTools.Field(typeof(ItemDrop.ItemData.SharedData), nameof(ItemDrop.ItemData.SharedData.m_teleportable)))
-                ).RemoveInstructions(3).InsertAndAdvance(
-                    new CodeInstruction(OpCodes.Ldloc_S, 18),
-                    Transpilers.EmitDelegate(IsItemTeleportable)
                 ).ThrowIfNotMatch("Unable to patch item teleport visual display.");
+
+                // Reuse the item load the match just landed on instead of naming a local slot.
+                // The slot number is not stable across game updates - it was 18 when this was
+                // written and is 16 now, and the old hardcoded index had drifted onto an
+                // unrelated bool local, which pushes the wrong type for the delegate below.
+                // Cloning also carries over any labels on the instruction being replaced.
+                CodeInstruction loadItem = codeMatcher.Instruction.Clone();
+
+                codeMatcher.RemoveInstructions(3).InsertAndAdvance(
+                    loadItem,
+                    Transpilers.EmitDelegate(IsItemTeleportable)
+                );
 
                 return codeMatcher.Instructions();
             }
