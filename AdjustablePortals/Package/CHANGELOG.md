@@ -1,3 +1,18 @@
+**0.4.0**
+---
+```
+- Riding a mount into a portal now takes the mount with you, and puts you back in the saddle on
+  arrival. Controlled by EnableTeleportMounts.
+- Tamed creatures standing near the portal now travel with you. On by default for tames you have
+  told to follow; TeleportTamesRequireFollowing can be turned off to take every tame in range
+  instead. Radius (5m) and headcount (5, nearest first) are configurable, and a tame somebody is
+  riding is left where it is.
+- Carts now travel with you, and are hitched back up on the far side. Only a cart you are actually
+  pulling comes along, and only if everything in it is something you could carry through yourself -
+  a cart holding ore the boss progression has not unlocked yet blocks the teleport and says which
+  item is stopping it, rather than leaving you searching your own inventory.
+```
+
 **0.3.3**
 ---
 ```

@@ -15,6 +15,21 @@ namespace AdjustablePortals.modules {
         // the stale reference would charge that portal for whatever teleport happened next.
         private const float ActiveSourcePortalLifetime = 30f;
 
+        /// <summary>
+        /// The portal a TargetPortal map was opened from, while that choice is still live.
+        /// </summary>
+        /// <remarks>
+        /// Read rather than consumed: unlike the fuel charge below, more than one thing wants to
+        /// know which portal a teleport started from, and a reader that cleared the answer would
+        /// decide by patch order which of them got it.
+        /// </remarks>
+        internal static TeleportWorld GetActiveSourcePortal() {
+            if (activeSourcePortal == null || Time.time > activeSourcePortalExpiry) {
+                return null;
+            }
+            return activeSourcePortal;
+        }
+
         internal static void CheckModCompat() {
             try {
                 Dictionary<string, BepInEx.BaseUnityPlugin> plugins = BepInExUtils.GetPlugins();

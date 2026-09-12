@@ -319,6 +319,7 @@ namespace AdjustablePortals.modules {
             [HarmonyPostfix]
             private static void OnShutdown() {
                 PortalInstanceActivatable.ClearPortalPieceCache();
+                TeleportCompanions.ClearSessionState();
             }
         }
     }

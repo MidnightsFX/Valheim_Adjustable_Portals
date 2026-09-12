@@ -28,6 +28,13 @@ namespace AdjustablePortals {
         public static ConfigEntry<int> PortalFuelUsagesPerBatch;
         public static ConfigEntry<int> PortalFuelBatchSize;
         public static ConfigEntry<string> PortalFuelPrefab;
+        public static ConfigEntry<bool> EnableTeleportMounts;
+        public static ConfigEntry<bool> EnableTeleportTames;
+        public static ConfigEntry<float> TeleportTamesRadius;
+        public static ConfigEntry<int> TeleportTamesMaxCount;
+        public static ConfigEntry<bool> TeleportTamesRequireFollowing;
+        public static ConfigEntry<bool> EnableTeleportCarts;
+        public static ConfigEntry<bool> ReattachCartAfterTeleport;
 
 
         public ValConfig(ConfigFile cf) {
@@ -55,6 +62,14 @@ namespace AdjustablePortals {
             PortalFuelUsagesPerBatch = BindServerConfig("PortalActivation", "PortalFuelUsagesPerBatch", 20, "The number of usages that one batch of the fuel type provides");
             PortalFuelBatchSize = BindServerConfig("PortalActivation", "PortalFuelBatchSize", 1, "The number of the portal fuel required for activation.");
             PortalFuelPrefab = BindServerConfig("PortalActivation", "PortalFuelPrefab", "SurtlingCore", "The prefab name that will be used for the portal costs.");
+
+            EnableTeleportMounts = BindServerConfig("PortalCompanions", "EnableTeleportMounts", true, "When enabled, a player riding a mount into a portal takes the mount with them and is put back in the saddle on arrival.");
+            EnableTeleportTames = BindServerConfig("PortalCompanions", "EnableTeleportTames", true, "When enabled, tamed creatures near the portal travel with the player to the destination.");
+            TeleportTamesRadius = BindServerConfig("PortalCompanions", "TeleportTamesRadius", 5f, "The distance around the portal that tamed creatures are collected from.", false, 0f, 50f);
+            TeleportTamesMaxCount = BindServerConfig("PortalCompanions", "TeleportTamesMaxCount", 5, "The most tamed creatures that one teleport will take along. The closest to the portal go first.", false, 0, 50);
+            TeleportTamesRequireFollowing = BindServerConfig("PortalCompanions", "TeleportTamesRequireFollowing", true, "When enabled, only tames that have been told to follow the teleporting player travel with them. Turn this off to take every tame standing near the portal, penned livestock included.");
+            EnableTeleportCarts = BindServerConfig("PortalCompanions", "EnableTeleportCarts", true, "When enabled, a cart the player is pulling travels with them. The cart may only hold items that the player themselves could teleport with, and blocks the teleport otherwise.");
+            ReattachCartAfterTeleport = BindServerConfig("PortalCompanions", "ReattachCartAfterTeleport", true, "When enabled, a cart that travelled through a portal is hitched back up on arrival instead of being left loose at the destination.", null, true);
 
 
             DefeatedEikthyrAllowedItems = BindServerConfig("PortalProgression", "DefeatedEikthyrAllowedItems", "", "Comma seperated list of prefab items that will be allowed to teleported once Eikthyr is defeated.");
