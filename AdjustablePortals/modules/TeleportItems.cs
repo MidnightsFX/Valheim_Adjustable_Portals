@@ -36,6 +36,7 @@ namespace AdjustablePortals.modules {
         internal static void YagluthAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(YagluthAllowedTeleports, ValConfig.DefeatedYagluthAllowItems.Value); }
         internal static void QueenAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(QueenAllowedTeleports, ValConfig.DefeatedQueenAllowItems.Value); }
         internal static void FaderAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(FaderAllowedTeleports, ValConfig.DefeatedFaderAllowItems.Value); }
+        internal static void ProgressionKeySourceChanged(object s, EventArgs e) { PlayerItemsAllowTeleport.Clear(); }
 
         private static void ConfigListChanged(List<string> targetList, string configValue) {
             PlayerItemsAllowTeleport.Clear();
@@ -110,6 +111,37 @@ namespace AdjustablePortals.modules {
             }
         }
 
+        // Private keys belong to the player rather than the world, so none of the patches above see
+        // them change. Load is here because it fills a freshly spawned player's keys directly rather
+        // than through AddUniqueKey, and every respawn and character switch goes through it.
+        [HarmonyPatch(typeof(Player))]
+        public static class ClearTeleportableCacheOnPlayerKeys {
+
+            [HarmonyPostfix]
+            [HarmonyPatch(nameof(Player.AddUniqueKey))]
+            private static void PlayerKeyAdded() {
+                PlayerItemsAllowTeleport.Clear();
+            }
+
+            [HarmonyPostfix]
+            [HarmonyPatch(nameof(Player.RemoveUniqueKey))]
+            private static void PlayerKeyRemoved() {
+                PlayerItemsAllowTeleport.Clear();
+            }
+
+            [HarmonyPostfix]
+            [HarmonyPatch(nameof(Player.ResetUniqueKeys))]
+            private static void PlayerKeysReset() {
+                PlayerItemsAllowTeleport.Clear();
+            }
+
+            [HarmonyPostfix]
+            [HarmonyPatch(nameof(Player.Load))]
+            private static void PlayerLoaded() {
+                PlayerItemsAllowTeleport.Clear();
+            }
+        }
+
         [HarmonyPatch(typeof(InventoryGrid))]
         public static class PerPlayerTeleportableItems {
 
@@ -156,49 +188,49 @@ namespace AdjustablePortals.modules {
 
                 bool teleportable = item.m_shared.m_teleportable;
                 // Eikthyr
-                if (teleportable == false && ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_eikthyr)) {
+                if (teleportable == false && ProgressionKeys.HasKey("defeated_eikthyr")) {
                     if (EikthyrAllowedTeleports.Contains(itemPrefab)) {
                         teleportable = true;
                     }
                 }
 
                 // Elder
-                if (teleportable == false && ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_gdking)) {
+                if (teleportable == false && ProgressionKeys.HasKey("defeated_gdking")) {
                     if (ElderAllowedTeleports.Contains(itemPrefab)) {
                         teleportable = true;
                     }
                 }
 
                 // Bonemass
-                if (teleportable == false && ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_bonemass)) {
+                if (teleportable == false && ProgressionKeys.HasKey("defeated_bonemass")) {
                     if (BonemassAllowedTeleports.Contains(itemPrefab)) {
                         teleportable = true;
                     }
                 }
 
                 // Moder
-                if (teleportable == false && ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_dragon)) {
+                if (teleportable == false && ProgressionKeys.HasKey("defeated_dragon")) {
                     if (ModerAllowedTeleports.Contains(itemPrefab)) {
                         teleportable = true;
                     }
                 }
 
                 // Yagluth
-                if (teleportable == false && ZoneSystem.instance.GetGlobalKey(GlobalKeys.defeated_goblinking)) {
+                if (teleportable == false && ProgressionKeys.HasKey("defeated_goblinking")) {
                     if (YagluthAllowedTeleports.Contains(itemPrefab)) {
                         teleportable = true;
                     }
                 }
 
                 // Queen
-                if (teleportable == false && ZoneSystem.instance.GetGlobalKey("defeated_queen")) {
+                if (teleportable == false && ProgressionKeys.HasKey("defeated_queen")) {
                     if (QueenAllowedTeleports.Contains(itemPrefab)) {
                         teleportable = true;
                     }
                 }
 
                 // Fader
-                if (teleportable == false && ZoneSystem.instance.GetGlobalKey("defeated_fader")) {
+                if (teleportable == false && ProgressionKeys.HasKey("defeated_fader")) {
                     if (FaderAllowedTeleports.Contains(itemPrefab)) {
                         teleportable = true;
                     }

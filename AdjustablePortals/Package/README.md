@@ -11,6 +11,10 @@ This mod aims to make portal progression more gradual, and encourage portals onl
 
 **Portal Item Teleportation progression**
 - Portals can allow designated non-teleportable items through based on defeated bosses.
+- Progression can be per player instead of world wide. Turn on `UsePrivateKeys` and each player
+  unlocks items by the bosses they helped defeat, rather than by any boss defeated on the server.
+  Everyone who landed a hit on a boss is credited with it. Characters that killed bosses before
+  this was turned on may have no record of it, since vanilla only credits one player per kill.
 
 **Travelling companions**
 - Ride your mount straight through a portal. It comes with you and you are put back in the saddle

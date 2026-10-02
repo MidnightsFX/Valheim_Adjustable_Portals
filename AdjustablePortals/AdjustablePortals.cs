@@ -17,16 +17,19 @@ namespace AdjustablePortals
     {
         public const string PluginGUID = "MidnightsFX.AdjustablePortals";
         public const string PluginName = "AdjustablePortals";
-        public const string PluginVersion = "0.4.0";
+        public const string PluginVersion = "0.5.0";
         internal static Harmony Harmony = new Harmony(PluginGUID);
 
-        public static CustomLocalization Localization = LocalizationManager.Instance.GetLocalization();
+        // Set in Awake, not here: a static initialiser can run before BepInEx has registered this plugin, and Jotunn
+        // then attributes the whole mod - its RPC names included - to Jotunn itself for the rest of the session.
+        public static CustomLocalization Localization;
         internal static ManualLogSource Log;
         // Held so modules without a MonoBehaviour of their own have somewhere to run a
         // coroutine that has to outlive the frame it was started on.
         internal static AdjustablePortals Instance;
 
         public void Awake() {
+            Localization = LocalizationManager.Instance.GetLocalization();
             Log = this.Logger;
             Instance = this;
             new ValConfig(Config);

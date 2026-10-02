@@ -23,6 +23,7 @@ namespace AdjustablePortals {
         public static ConfigEntry<string> DefeatedYagluthAllowItems;
         public static ConfigEntry<string> DefeatedQueenAllowItems;
         public static ConfigEntry<string> DefeatedFaderAllowItems;
+        public static ConfigEntry<bool> UsePrivateKeys;
         public static ConfigEntry<bool> EnablePortalPieceRequirements;
         public static ConfigEntry<bool> EnablePortalRequireFuel;
         public static ConfigEntry<int> PortalFuelUsagesPerBatch;
@@ -72,6 +73,8 @@ namespace AdjustablePortals {
             ReattachCartAfterTeleport = BindServerConfig("PortalCompanions", "ReattachCartAfterTeleport", true, "When enabled, a cart that travelled through a portal is hitched back up on arrival instead of being left loose at the destination.", null, true);
 
 
+            UsePrivateKeys = BindServerConfig("PortalProgression", "UsePrivateKeys", false, "When enabled, the items below unlock for each player by the bosses that player has helped defeat, instead of by the bosses defeated anywhere in the world. Every player who landed a hit on a boss is credited with it when it dies.");
+            UsePrivateKeys.SettingChanged += TeleportItems.ProgressionKeySourceChanged;
             DefeatedEikthyrAllowedItems = BindServerConfig("PortalProgression", "DefeatedEikthyrAllowedItems", "", "Comma seperated list of prefab items that will be allowed to teleported once Eikthyr is defeated.");
             DefeatedEikthyrAllowedItems.SettingChanged += TeleportItems.EikthyrAllowedTeleportsChanged;
             DefeatedElderAllowedItems = BindServerConfig("PortalProgression", "DefeatedElderAllowedItems", "", "Comma seperated list of prefab items that will be allowed to be teleported once The Elder is defeated.");

@@ -1,3 +1,10 @@
+**0.5.0**
+---
+```
+- Boss item unlocks can now be earned per player instead of world wide, as an option.
+- With per player unlocks, everyone who fought a boss is credited with the kill, not just one player.
+```
+
 **0.4.0**
 ---
 ```
