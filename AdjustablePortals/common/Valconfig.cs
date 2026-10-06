@@ -95,7 +95,7 @@ namespace AdjustablePortals {
             DefeatedEikthyrAllowedItems.SettingChanged += TeleportItems.EikthyrAllowedTeleportsChanged;
             DefeatedElderAllowedItems = BindServerConfig("PortalProgression", "DefeatedElderAllowedItems", "", "Comma seperated list of prefab items that will be allowed to be teleported once The Elder is defeated.");
             DefeatedElderAllowedItems.SettingChanged += TeleportItems.ElderAllowedTeleportsChanged;
-            DefeatedBonemassAllowedItems = BindServerConfig("PortalProgression", "DefeatedBonemassAllowedItems", "Bronze,Copper,Tin,CopperOre,TinOre,BronzeScrap", "Comma seperated list of prefab items that will be allowed to be teleported once Bonemass is defeated.");
+            DefeatedBonemassAllowedItems = BindServerConfig("PortalProgression", "DefeatedBonemassAllowedItems", "Bronze,Copper,Tin,CopperOre,TinOre,BronzeScrap,CopperScrap", "Comma seperated list of prefab items that will be allowed to be teleported once Bonemass is defeated.");
             DefeatedBonemassAllowedItems.SettingChanged += TeleportItems.BonemassAllowedTeleportsChanged;
             DefeatedModerAllowItems = BindServerConfig("PortalProgression", "DefeatedModerAllowItems", "Iron,IronOre,Ironpit,IronScrap,chest_hildir1,chest_hildir2,chest_hildir3", "Comma seperated list of prefab items that will be allowed to be teleported once Moder is defeated.");
             DefeatedModerAllowItems.SettingChanged += TeleportItems.ModerAllowedTeleportsChanged;
