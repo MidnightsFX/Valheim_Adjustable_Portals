@@ -1,3 +1,12 @@
+**0.6.0**
+---
+```
+- Server admins can now name items that may never be taken through a portal.
+- Fixes item lists in the config not matching items when written with spaces or different capitalisation.
+- Fixes backpacks from the Backpacks mod all being allowed or refused together, and they now follow boss progression for what they hold.
+- Logs when a joining player receives the server's settings
+```
+
 **0.5.0**
 ---
 ```

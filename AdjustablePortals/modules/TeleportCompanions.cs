@@ -143,7 +143,8 @@ namespace AdjustablePortals.modules {
                 }
                 // Mirrors Inventory.IsTeleportable, which refuses these ahead of both the portal's
                 // allowAllItems flag and the TeleportAll key - not a restriction this mod lifts.
-                if (item.m_shared.m_toolTier < 1000) {
+                // The configured never-teleport list is held to the same standard.
+                if (item.m_shared.m_toolTier < 1000 && TeleportItems.IsItemBlocked(item) == false) {
                     if (allowAllItems || teleportAllKey) {
                         continue;
                     }
@@ -441,9 +442,10 @@ namespace AdjustablePortals.modules {
         [HarmonyPatch(typeof(Humanoid))]
         internal static class LoadedCartBlocksTeleport {
 
-            // Runs after TeleportItems' postfix, which promotes a false result to true once the
-            // player's own items clear progression. The ordering only matters in one direction:
-            // this may never promote a result, and its refusal has to be the last word.
+            // TeleportItems' patches on Inventory.IsTeleportable, which this method forwards to,
+            // have already promoted a false result once the player's own items clear progression.
+            // Last is for other mods' postfixes here: this may never promote a result, and its
+            // refusal has to be the last word.
             [HarmonyPatch(nameof(Humanoid.IsTeleportable))]
             [HarmonyPostfix]
             [HarmonyPriority(Priority.Last)]

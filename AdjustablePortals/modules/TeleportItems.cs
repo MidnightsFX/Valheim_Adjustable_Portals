@@ -1,22 +1,33 @@
 ﻿using HarmonyLib;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 
 namespace AdjustablePortals.modules {
     public static class TeleportItems {
 
-        internal static List<string> EikthyrAllowedTeleports = new List<string>();
-        internal static List<string> ElderAllowedTeleports = new List<string>();
-        internal static List<string> BonemassAllowedTeleports = new List<string>();
-        internal static List<string> ModerAllowedTeleports = new List<string>();
-        internal static List<string> YagluthAllowedTeleports = new List<string>();
-        internal static List<string> QueenAllowedTeleports = new List<string>();
-        internal static List<string> FaderAllowedTeleports = new List<string>();
+        // Prefab names, matched ignoring case and surrounding spaces. Admins type these lists by hand,
+        // and "Copper, copperscrap" has to mean the same as "Copper,CopperScrap".
+        internal static readonly HashSet<string> EikthyrAllowedTeleports = NewItemSet();
+        internal static readonly HashSet<string> ElderAllowedTeleports = NewItemSet();
+        internal static readonly HashSet<string> BonemassAllowedTeleports = NewItemSet();
+        internal static readonly HashSet<string> ModerAllowedTeleports = NewItemSet();
+        internal static readonly HashSet<string> YagluthAllowedTeleports = NewItemSet();
+        internal static readonly HashSet<string> QueenAllowedTeleports = NewItemSet();
+        internal static readonly HashSet<string> FaderAllowedTeleports = NewItemSet();
+        internal static readonly HashSet<string> NonTeleportableItems = NewItemSet();
 
-        static Dictionary<string, bool> PlayerItemsAllowTeleport = new Dictionary<string, bool>();
+        // Whether boss progression has unlocked a prefab. Deliberately not the item's whole answer,
+        // which also depends on the item's own m_teleportable - and that is not a property of the
+        // prefab. Backpacks gives each backpack a private copy of its shared data and flips the
+        // flag to follow what is inside, so caching the combined answer by prefab name settled
+        // every backpack by whichever one happened to be asked about first.
+        static readonly Dictionary<string, bool> ProgressionUnlocked = new Dictionary<string, bool>();
+
+        private static HashSet<string> NewItemSet() {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
 
         // Initial loading of the config lists
         internal static void SetupTeleportLists() {
@@ -27,6 +38,7 @@ namespace AdjustablePortals.modules {
             ConfigListChanged(YagluthAllowedTeleports, ValConfig.DefeatedYagluthAllowItems.Value);
             ConfigListChanged(QueenAllowedTeleports, ValConfig.DefeatedQueenAllowItems.Value);
             ConfigListChanged(FaderAllowedTeleports, ValConfig.DefeatedFaderAllowItems.Value);
+            ConfigListChanged(NonTeleportableItems, ValConfig.NonTeleportableItems.Value);
         }
 
         internal static void EikthyrAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(EikthyrAllowedTeleports, ValConfig.DefeatedEikthyrAllowedItems.Value); }
@@ -36,55 +48,89 @@ namespace AdjustablePortals.modules {
         internal static void YagluthAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(YagluthAllowedTeleports, ValConfig.DefeatedYagluthAllowItems.Value); }
         internal static void QueenAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(QueenAllowedTeleports, ValConfig.DefeatedQueenAllowItems.Value); }
         internal static void FaderAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(FaderAllowedTeleports, ValConfig.DefeatedFaderAllowItems.Value); }
-        internal static void ProgressionKeySourceChanged(object s, EventArgs e) { PlayerItemsAllowTeleport.Clear(); }
+        internal static void NonTeleportableItemsChanged(object s, EventArgs e) { ConfigListChanged(NonTeleportableItems, ValConfig.NonTeleportableItems.Value); }
+        internal static void ProgressionKeySourceChanged(object s, EventArgs e) { InvalidateCache(); }
 
-        private static void ConfigListChanged(List<string> targetList, string configValue) {
-            PlayerItemsAllowTeleport.Clear();
-            try {
-                List<string> listEntry = new List<string>() { };
-                foreach (var item in configValue.Split(',')) {
-                    listEntry.Add(item);
+        /// <summary>
+        /// Forgets every cached progression answer. Anything that changes which bosses count as
+        /// defeated, or what they unlock, has to come through here.
+        /// </summary>
+        internal static void InvalidateCache() {
+            ProgressionUnlocked.Clear();
+            // Backpacks worked out each backpack's teleport flag from the answers just thrown away.
+            Compatibility.MarkBackpacksStale();
+        }
+
+        private static void ConfigListChanged(HashSet<string> targetSet, string configValue) {
+            InvalidateCache();
+            targetSet.Clear();
+            if (string.IsNullOrEmpty(configValue)) {
+                return;
+            }
+            foreach (string entry in configValue.Split(',')) {
+                string prefab = entry.Trim();
+                if (prefab.Length > 0) {
+                    targetSet.Add(prefab);
                 }
-                if (listEntry.Count > 0) {
-                    targetList.Clear();
-                    targetList.AddRange(listEntry);
-                }
-            } catch (Exception ex) {
-                Logger.LogWarning($"Error parsing ConfigList: {ex}");
             }
         }
 
+        /// <summary>
+        /// Whether <paramref name="item"/> is on the configured list of items that may never be
+        /// teleported.
+        /// </summary>
+        internal static bool IsItemBlocked(ItemDrop.ItemData item) {
+            return NonTeleportableItems.Count > 0 && item != null && item.m_dropPrefab != null && NonTeleportableItems.Contains(item.m_dropPrefab.name);
+        }
 
-        [HarmonyPatch(typeof(Humanoid))]
+        // Inventory rather than Humanoid, which only forwards here. Backpacks asks a backpack's own
+        // inventory this directly to decide whether the backpack may travel, and it has to get the
+        // same answer the player's inventory would.
+        [HarmonyPatch(typeof(Inventory))]
         private static class AllowConfiguredTeleportableItems {
-            [HarmonyPatch(nameof(Humanoid.IsTeleportable))]
-            private static void Postfix(Humanoid __instance, ref bool __result) {
-                // Nothing to do if the player is already allowed to teleport
+            [HarmonyPatch(nameof(Inventory.IsTeleportable))]
+            private static void Postfix(Inventory __instance, ref bool __result) {
+                // Nothing to do if the inventory is already allowed to teleport
                 if (__result == true) { return; }
 
+                List<ItemDrop.ItemData> items = __instance.m_inventory;
                 // Vanilla refuses these outright, ahead of both allowAllItems and the TeleportAll
                 // global key, so it is not a restriction this mod is meant to lift. Nothing below
-                // would catch it either: the scan only considers items flagged m_teleportable
-                // false, and an item blocked purely on tool tier is usually not one of them, so
-                // the allow list comes back empty and reads as "all clear".
-                if (__instance.m_inventory.GetAllItems().Any(x => x.m_shared.m_toolTier >= 1000)) {
-                    return;
-                }
-
-                List<ItemDrop.ItemData> playerNonTeleportableItems = __instance.m_inventory.GetAllItems().Where(x => x.m_shared.m_teleportable == false).Distinct().ToList();
-                //Logger.LogDebug($"Checking if the player can teleport the following items: {string.Join(", ", playerNonTeleportableItems)}");
-                List<string> playerItemsNotAllowed = new List<string>();
-                foreach (ItemDrop.ItemData item in playerNonTeleportableItems) {
-                    if (PerPlayerTeleportableItems.IsItemTeleportable(item) == false) {
-                        playerItemsNotAllowed.Add(item.m_dropPrefab.name);
+                // would catch it either: an item blocked purely on tool tier is usually still
+                // flagged m_teleportable, so the scan reads it as "all clear".
+                for (int i = 0; i < items.Count; i++) {
+                    if (items[i].m_shared.m_toolTier >= 1000) {
+                        return;
                     }
                 }
 
-                if (playerItemsNotAllowed.Count == 0) {
-                    __result = true;
-                } else {
-                    Logger.LogDebug($"The following items are not teleportable {string.Join(", ", playerItemsNotAllowed)}");
-                    __result = false;
+                // Runs twice a second for every portal the player stands near, so no LINQ here.
+                for (int i = 0; i < items.Count; i++) {
+                    if (PerPlayerTeleportableItems.IsItemTeleportable(items[i]) == false) {
+                        return;
+                    }
+                }
+                __result = true;
+            }
+        }
+
+        [HarmonyPatch(typeof(Inventory))]
+        private static class BlockNonTeleportableItems {
+            // Last, so that nothing promoting the result after this - another mod's "let everything
+            // through" option included - can carry a blocked item past it. This mod's own
+            // progression allowance above never promotes a blocked item to begin with.
+            [HarmonyPatch(nameof(Inventory.IsTeleportable))]
+            [HarmonyPriority(Priority.Last)]
+            private static void Postfix(Inventory __instance, ref bool __result) {
+                if (__result == false || NonTeleportableItems.Count == 0) {
+                    return;
+                }
+                List<ItemDrop.ItemData> items = __instance.m_inventory;
+                for (int i = 0; i < items.Count; i++) {
+                    if (IsItemBlocked(items[i])) {
+                        __result = false;
+                        return;
+                    }
                 }
             }
         }
@@ -99,7 +145,7 @@ namespace AdjustablePortals.modules {
             [HarmonyPostfix]
             [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.GlobalKeyAdd), argumentTypes: new Type[] { typeof(string), typeof(bool) })]
             private static void GlobalKeyAdded(string keyStr) {
-                PlayerItemsAllowTeleport.Clear();
+                InvalidateCache();
             }
 
             // Covers removals too: RPC_GlobalKeys clears and re-adds, so a key that went away shows
@@ -107,7 +153,7 @@ namespace AdjustablePortals.modules {
             [HarmonyPostfix]
             [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.ClearGlobalKeys))]
             private static void GlobalKeysCleared() {
-                PlayerItemsAllowTeleport.Clear();
+                InvalidateCache();
             }
         }
 
@@ -120,25 +166,27 @@ namespace AdjustablePortals.modules {
             [HarmonyPostfix]
             [HarmonyPatch(nameof(Player.AddUniqueKey))]
             private static void PlayerKeyAdded() {
-                PlayerItemsAllowTeleport.Clear();
+                InvalidateCache();
             }
 
             [HarmonyPostfix]
             [HarmonyPatch(nameof(Player.RemoveUniqueKey))]
             private static void PlayerKeyRemoved() {
-                PlayerItemsAllowTeleport.Clear();
+                InvalidateCache();
             }
 
             [HarmonyPostfix]
             [HarmonyPatch(nameof(Player.ResetUniqueKeys))]
             private static void PlayerKeysReset() {
-                PlayerItemsAllowTeleport.Clear();
+                InvalidateCache();
             }
 
+            // Also what puts right the backpacks: Load reads the inventory before the private keys,
+            // so Backpacks has already judged every backpack without them by the time this runs.
             [HarmonyPostfix]
             [HarmonyPatch(nameof(Player.Load))]
             private static void PlayerLoaded() {
-                PlayerItemsAllowTeleport.Clear();
+                InvalidateCache();
             }
         }
 
@@ -177,71 +225,41 @@ namespace AdjustablePortals.modules {
             }
 
             public static bool IsItemTeleportable(ItemDrop.ItemData item) {
-                if (item == null || item.m_shared == null || item.m_dropPrefab == null) {
+                if (item == null || item.m_shared == null) {
                     return true;
+                }
+                // Nothing for a config entry to name, so this is vanilla's call.
+                if (item.m_dropPrefab == null) {
+                    return item.m_shared.m_teleportable;
                 }
                 string itemPrefab = item.m_dropPrefab.name;
 
-                if (PlayerItemsAllowTeleport.ContainsKey(itemPrefab)) {
-                    return PlayerItemsAllowTeleport[itemPrefab];
+                if (NonTeleportableItems.Contains(itemPrefab)) {
+                    return false;
+                }
+                // Read fresh every call rather than cached with the answer below; see ProgressionUnlocked.
+                if (item.m_shared.m_teleportable) {
+                    return true;
+                }
+                return IsUnlockedByProgression(itemPrefab);
+            }
+
+            private static bool IsUnlockedByProgression(string itemPrefab) {
+                if (ProgressionUnlocked.TryGetValue(itemPrefab, out bool unlocked)) {
+                    return unlocked;
                 }
 
-                bool teleportable = item.m_shared.m_teleportable;
-                // Eikthyr
-                if (teleportable == false && ProgressionKeys.HasKey("defeated_eikthyr")) {
-                    if (EikthyrAllowedTeleports.Contains(itemPrefab)) {
-                        teleportable = true;
-                    }
-                }
+                unlocked = (EikthyrAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_eikthyr"))
+                    || (ElderAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_gdking"))
+                    || (BonemassAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_bonemass"))
+                    || (ModerAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_dragon"))
+                    || (YagluthAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_goblinking"))
+                    || (QueenAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_queen"))
+                    || (FaderAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_fader"));
 
-                // Elder
-                if (teleportable == false && ProgressionKeys.HasKey("defeated_gdking")) {
-                    if (ElderAllowedTeleports.Contains(itemPrefab)) {
-                        teleportable = true;
-                    }
-                }
-
-                // Bonemass
-                if (teleportable == false && ProgressionKeys.HasKey("defeated_bonemass")) {
-                    if (BonemassAllowedTeleports.Contains(itemPrefab)) {
-                        teleportable = true;
-                    }
-                }
-
-                // Moder
-                if (teleportable == false && ProgressionKeys.HasKey("defeated_dragon")) {
-                    if (ModerAllowedTeleports.Contains(itemPrefab)) {
-                        teleportable = true;
-                    }
-                }
-
-                // Yagluth
-                if (teleportable == false && ProgressionKeys.HasKey("defeated_goblinking")) {
-                    if (YagluthAllowedTeleports.Contains(itemPrefab)) {
-                        teleportable = true;
-                    }
-                }
-
-                // Queen
-                if (teleportable == false && ProgressionKeys.HasKey("defeated_queen")) {
-                    if (QueenAllowedTeleports.Contains(itemPrefab)) {
-                        teleportable = true;
-                    }
-                }
-
-                // Fader
-                if (teleportable == false && ProgressionKeys.HasKey("defeated_fader")) {
-                    if (FaderAllowedTeleports.Contains(itemPrefab)) {
-                        teleportable = true;
-                    }
-                }
-
-
-                //Logger.LogDebug($"Item is teleportable? {itemPrefab} - {teleportable}");
-                if (PlayerItemsAllowTeleport.ContainsKey(itemPrefab) == false) {
-                    PlayerItemsAllowTeleport.Add(itemPrefab, teleportable);
-                }
-                return teleportable;
+                //Logger.LogDebug($"Item is unlocked by progression? {itemPrefab} - {unlocked}");
+                ProgressionUnlocked[itemPrefab] = unlocked;
+                return unlocked;
             }
         }
     }

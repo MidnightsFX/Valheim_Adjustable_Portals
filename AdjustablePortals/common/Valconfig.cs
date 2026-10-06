@@ -3,6 +3,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using Jotunn.Entities;
 using Jotunn.Managers;
+using Jotunn.Utils;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -23,6 +24,7 @@ namespace AdjustablePortals {
         public static ConfigEntry<string> DefeatedYagluthAllowItems;
         public static ConfigEntry<string> DefeatedQueenAllowItems;
         public static ConfigEntry<string> DefeatedFaderAllowItems;
+        public static ConfigEntry<string> NonTeleportableItems;
         public static ConfigEntry<bool> UsePrivateKeys;
         public static ConfigEntry<bool> EnablePortalPieceRequirements;
         public static ConfigEntry<bool> EnablePortalRequireFuel;
@@ -45,6 +47,20 @@ namespace AdjustablePortals {
             CreateConfigValues(cf);
             Logger.setDebugLogging(EnableDebugMode.Value);
             SetupMainFileWatcher();
+            SynchronizationManager.OnConfigurationSynchronized += OnConfigurationSynchronized;
+        }
+
+        // Jotunn puts every server-controlled setting back to its default the moment a client joins,
+        // and only the server's values arriving undoes that. Nothing else in the log says at Info
+        // whether they did, which is exactly the question when a client is found running on defaults.
+        // Also fires on the server and on an admin's client when the admin pushes a change.
+        private static void OnConfigurationSynchronized(object sender, ConfigurationSynchronizationEventArgs e) {
+            if (e.UpdatedPluginGUIDs == null || e.UpdatedPluginGUIDs.Contains(AdjustablePortals.PluginGUID) == false) {
+                return;
+            }
+            Logger.LogInfo($"Server configuration applied ({(e.InitialSynchronization ? "on join" : "update")}). " +
+                $"Nearby pieces required: {(EnablePortalPieceRequirements.Value ? PortalNearbyPiecesForActivation.Value.ToString() : "off")}, " +
+                $"fuel required: {EnablePortalRequireFuel.Value}, private keys: {UsePrivateKeys.Value}.");
         }
 
         private void CreateConfigValues(ConfigFile Config) {
@@ -89,6 +105,8 @@ namespace AdjustablePortals {
             DefeatedQueenAllowItems.SettingChanged += TeleportItems.QueenAllowedTeleportsChanged;
             DefeatedFaderAllowItems = BindServerConfig("PortalProgression", "DefeatedFaderAllowItems", "DvergrNeedle", "Comma seperated list of prefab items that will be allowed to be teleported once Fader is defeated.");
             DefeatedFaderAllowItems.SettingChanged += TeleportItems.FaderAllowedTeleportsChanged;
+            NonTeleportableItems = BindServerConfig("PortalProgression", "NonTeleportableItems", "", "Comma seperated list of prefab items that may never be teleported, whatever bosses have been defeated. This applies everywhere, including portals and world settings that would otherwise let every item through.");
+            NonTeleportableItems.SettingChanged += TeleportItems.NonTeleportableItemsChanged;
         }
 
 

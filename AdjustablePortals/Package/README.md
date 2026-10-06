@@ -15,6 +15,10 @@ This mod aims to make portal progression more gradual, and encourage portals onl
   unlocks items by the bosses they helped defeat, rather than by any boss defeated on the server.
   Everyone who landed a hit on a boss is credited with it. Characters that killed bosses before
   this was turned on may have no record of it, since vanilla only credits one player per kill.
+- Specific items can be made never teleportable with `NonTeleportableItems`. This holds even at
+  portals and under world settings that would otherwise let every item through.
+- Item lists are comma separated prefab names, e.g. `Copper, CopperScrap`. Spaces and
+  capitalisation do not matter.
 
 **Travelling companions**
 - Ride your mount straight through a portal. It comes with you and you are put back in the saddle
@@ -25,6 +29,11 @@ This mod aims to make portal progression more gradual, and encourage portals onl
 - A cart you are pulling can travel with you, and is hitched back up on the other side. The cart
   may only hold what you could carry through yourself: anything the boss progression above has not
   unlocked yet blocks the teleport, and the portal tells you which item is the problem.
+
+**Compatibility**
+- TargetPortal (Smoothbrain): portal requirements and fuel apply before its map opens.
+- Backpacks (Smoothbrain): what a backpack may carry through a portal follows the same boss
+  progression as your own inventory.
 
 
 ## Reporting issues or feedback
