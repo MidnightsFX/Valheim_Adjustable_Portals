@@ -143,6 +143,19 @@ namespace AdjustablePortals.modules {
                 Logger.LogDebug("Consumed 1 usage of portal fuel.");
             }
 
+            /// <summary>
+            /// Whether a portal had enough building pieces around it the last time it was counted,
+            /// read from the count stored on its ZDO. This is what the server has to go on for a
+            /// portal nobody is near: it may be out of date, and a portal that has not been loaded
+            /// since the mod was installed has no count at all.
+            /// </summary>
+            internal static bool StoredPiecesMeetRequirement(ZDO portal) {
+                if (ValConfig.EnablePortalPieceRequirements.Value == false) {
+                    return true;
+                }
+                return portal.GetInt(nearbyPiecesKey, 0) >= ValConfig.PortalNearbyPiecesForActivation.Value;
+            }
+
             public static bool AreActivationRequirementsMet(TeleportWorld instance, out string reason) {
                 reason = "";
                 bool result = true;
@@ -181,11 +194,18 @@ namespace AdjustablePortals.modules {
                 // early return in TargetFoundPrevention. Safe either way on TargetPortal: without
                 // it, vanilla HaveTarget is exactly the connection test below, and with it, its own
                 // HaveTarget prefix forces true, which is what this method returns here anyway.
+                //
+                // Picking destinations is the exception: there the connection test is the wrong
+                // question, since the player chooses the far end and every portal has one.
                 if (ValConfig.EnablePortalPieceRequirements.Value == false && ValConfig.EnablePortalRequireFuel.Value == false) {
+                    if (PortalTargeting.IsActive) {
+                        __result = true;
+                        return false;
+                    }
                     return true;
                 }
 
-                if (!Compatibility.IsTargetPortalInstalled) {
+                if (!Compatibility.IsTargetPortalInstalled && !PortalTargeting.IsActive) {
                     if (__instance.m_nview.GetZDO().GetConnectionZDOID(ZDOExtraData.ConnectionType.Portal) == ZDOID.None) {
                         __result = false;
                         return false;
@@ -320,6 +340,7 @@ namespace AdjustablePortals.modules {
             private static void OnShutdown() {
                 PortalInstanceActivatable.ClearPortalPieceCache();
                 TeleportCompanions.ClearSessionState();
+                PortalTargeting.ClearSessionState();
             }
         }
     }

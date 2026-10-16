@@ -69,6 +69,32 @@ namespace AdjustablePortals.modules {
             blockedItemBuffer.Clear();
         }
 
+        /// <summary>
+        /// Marks <paramref name="portal"/> as where a teleport this frame starts from. Only good for
+        /// a Player.TeleportTo made in the same frame - which is how both vanilla's portal and
+        /// PortalTargeting's pickers call it.
+        /// </summary>
+        internal static void NoteSourcePortal(TeleportWorld portal) {
+            vanillaSourcePortal = portal;
+            vanillaSourcePortalFrame = Time.frameCount;
+        }
+
+        /// <summary>
+        /// Whether the cart <paramref name="player"/> is pulling holds anything that may not go
+        /// through <paramref name="portal"/>, and if so what.
+        /// </summary>
+        internal static bool CartBlocksPortal(Player player, TeleportWorld portal, out string blockedBy) {
+            blockedBy = "";
+            if (ValConfig.EnableTeleportCarts.Value == false || player == null || player != Player.m_localPlayer) {
+                return false;
+            }
+            Vagon cart = GetAttachedCart(player);
+            if (cart == null) {
+                return false;
+            }
+            return IsCartTeleportable(cart, portal.m_allowAllItems, out blockedBy) == false;
+        }
+
         private static Vector3 CompanionOffset(int index) {
             float angle = index * GoldenAngleDegrees * Mathf.Deg2Rad;
             float radius = CompanionSpacing * Mathf.Sqrt(index + 1);
@@ -411,22 +437,14 @@ namespace AdjustablePortals.modules {
                 // Note which portal this is for the Player.TeleportTo patch below. Teleport calls
                 // TeleportTo from its own body, so the frame stamp pairs them without leaving a
                 // reference behind that could outlive a teleport that never happened.
-                vanillaSourcePortal = __instance;
-                vanillaSourcePortalFrame = Time.frameCount;
+                NoteSourcePortal(__instance);
 
-                if (ValConfig.EnableTeleportCarts.Value == false || player == null || player != Player.m_localPlayer) {
-                    return true;
-                }
-                Vagon cart = GetAttachedCart(player);
-                if (cart == null) {
+                if (CartBlocksPortal(player, __instance, out string blockedBy) == false) {
                     return true;
                 }
                 // Vanilla says nothing at an unconnected or blocked portal, and neither should a
                 // cart complaint - walking past one should not start explaining itself.
                 if (__instance.TargetFound() == false) {
-                    return true;
-                }
-                if (IsCartTeleportable(cart, __instance.m_allowAllItems, out string blockedBy)) {
                     return true;
                 }
 

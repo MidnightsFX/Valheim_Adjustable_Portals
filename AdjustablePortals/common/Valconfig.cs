@@ -38,6 +38,7 @@ namespace AdjustablePortals {
         public static ConfigEntry<bool> TeleportTamesRequireFollowing;
         public static ConfigEntry<bool> EnableTeleportCarts;
         public static ConfigEntry<bool> ReattachCartAfterTeleport;
+        public static ConfigEntry<PortalTargeting.TargetingMode> PortalTargetingMode;
 
 
         public ValConfig(ConfigFile cf) {
@@ -60,7 +61,8 @@ namespace AdjustablePortals {
             }
             Logger.LogInfo($"Server configuration applied ({(e.InitialSynchronization ? "on join" : "update")}). " +
                 $"Nearby pieces required: {(EnablePortalPieceRequirements.Value ? PortalNearbyPiecesForActivation.Value.ToString() : "off")}, " +
-                $"fuel required: {EnablePortalRequireFuel.Value}, private keys: {UsePrivateKeys.Value}.");
+                $"fuel required: {EnablePortalRequireFuel.Value}, private keys: {UsePrivateKeys.Value}, " +
+                $"portal targeting: {PortalTargetingMode.Value}.");
         }
 
         private void CreateConfigValues(ConfigFile Config) {
@@ -87,6 +89,15 @@ namespace AdjustablePortals {
             TeleportTamesRequireFollowing = BindServerConfig("PortalCompanions", "TeleportTamesRequireFollowing", true, "When enabled, only tames that have been told to follow the teleporting player travel with them. Turn this off to take every tame standing near the portal, penned livestock included.");
             EnableTeleportCarts = BindServerConfig("PortalCompanions", "EnableTeleportCarts", true, "When enabled, a cart the player is pulling travels with them. The cart may only hold items that the player themselves could teleport with, and blocks the teleport otherwise.");
             ReattachCartAfterTeleport = BindServerConfig("PortalCompanions", "ReattachCartAfterTeleport", true, "When enabled, a cart that travelled through a portal is hitched back up on arrival instead of being left loose at the destination.", null, true);
+
+            PortalTargetingMode = BindServerConfig("PortalTargeting", "PortalTargetingMode", PortalTargeting.TargetingMode.Vanilla,
+                "How a player chooses where a portal sends them. Vanilla: portals connect to the portal with the same name. " +
+                "SelectFromList: stepping into a portal opens a list of every other portal to pick from. " +
+                "SelectOnMap: stepping into a portal opens the map with every other portal marked on it - when the map is disabled this uses SelectInSpace instead. " +
+                "SelectInSpace: stepping into a portal shows every other portal at its rough position against a starfield rather than the map, so it works without a map. " +
+                "In every mode but Vanilla, a portal is only offered as a destination once it has the nearby building pieces it needs to activate itself. " +
+                "Ignored while the TargetPortal mod is installed, which has its own map.");
+            PortalTargetingMode.SettingChanged += PortalTargeting.TargetingModeChanged;
 
 
             UsePrivateKeys = BindServerConfig("PortalProgression", "UsePrivateKeys", false, "When enabled, the items below unlock for each player by the bosses that player has helped defeat, instead of by the bosses defeated anywhere in the world. Every player who landed a hit on a boss is credited with it when it dies.");
@@ -233,6 +244,17 @@ namespace AdjustablePortals {
             return cfg.Bind(catagory, key, value,
                 new ConfigDescription(description,
                 new AcceptableValueRange<float>(valmin, valmax),
+                new ConfigurationManagerAttributes { IsAdminOnly = true, IsAdvanced = advanced })
+                );
+        }
+
+        /// <summary>
+        /// Helper to bind configs for enum types. ConfigurationManager shows these as a dropdown of the enum's names.
+        /// </summary>
+        public static ConfigEntry<T> BindServerConfig<T>(string catagory, string key, T value, string description, bool advanced = false) where T : struct, Enum {
+            return cfg.Bind(catagory, key, value,
+                new ConfigDescription(description,
+                null,
                 new ConfigurationManagerAttributes { IsAdminOnly = true, IsAdvanced = advanced })
                 );
         }

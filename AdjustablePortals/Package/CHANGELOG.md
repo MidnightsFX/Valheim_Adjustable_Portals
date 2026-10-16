@@ -1,3 +1,10 @@
+**0.7.0**
+---
+```
+- Portals can optionally let players choose where they go, from a list, on the map, or on a starfield view that works without a map.
+	- Only portals with their activation requirements met show up on the list.
+```
+
 **0.6.0**
 ---
 ```

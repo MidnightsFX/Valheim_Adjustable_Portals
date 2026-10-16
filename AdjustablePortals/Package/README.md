@@ -30,8 +30,29 @@ This mod aims to make portal progression more gradual, and encourage portals onl
   may only hold what you could carry through yourself: anything the boss progression above has not
   unlocked yet blocks the teleport, and the portal tells you which item is the problem.
 
+**Choosing a destination**
+- Instead of only reaching the portal with the same name, players can choose where a portal sends
+  them. `PortalTargetingMode` picks how:
+  - `Vanilla` (default): portals connect to the portal with the same name.
+  - `SelectFromList`: stepping into a portal opens a list of every other portal, which you can
+    filter by typing. Each entry shows how far away it is and in which direction, which tells
+    apart portals that share a name.
+  - `SelectOnMap`: stepping into a portal opens the map with every other portal marked on it.
+    Click one to travel there, or close the map to stay. When the map is turned off, this uses
+    `SelectInSpace` instead.
+  - `SelectInSpace`: shows every other portal where it lies relative to the others, against a
+    starfield instead of the map, so it works in worlds without a map. Scroll to zoom, drag to look
+    around, and click a portal to travel there.
+- A portal is only offered as a destination once it has the nearby building pieces it needs to
+  activate itself. Its pieces are counted when someone with the mod is near it, so a portal in an
+  area nobody has visited since the mod was installed will not show up until someone does.
+- Fuel, item restrictions, carts, mounts and tames all work the same as through a portal pair.
+- Every qualifying portal can be travelled to, whatever it is named and whether or not it is
+  inside a ward.
+
 **Compatibility**
-- TargetPortal (Smoothbrain): portal requirements and fuel apply before its map opens.
+- TargetPortal (Smoothbrain): portal requirements and fuel apply before its map opens. While it is
+  installed, `PortalTargetingMode` is ignored and TargetPortal chooses destinations.
 - Backpacks (Smoothbrain): what a backpack may carry through a portal follows the same boss
   progression as your own inventory.
 
@@ -47,4 +68,9 @@ If you have feature suggestions, or improvement suggestions feel free to ask in 
 
 The following features are currently planned:
 - Configure portal building costs
-- Alternate interface options for teleporting
+
+---
+
+If you enjoy my mods donations are appreciated. My mods will never be paid and donations are not required.
+
+<a href="https://ko-fi.com/midnightsfx"><img height="36" src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" alt="Support me on Ko-fi"></a>

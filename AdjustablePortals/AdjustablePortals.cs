@@ -18,7 +18,7 @@ namespace AdjustablePortals
     {
         public const string PluginGUID = "MidnightsFX.AdjustablePortals";
         public const string PluginName = "AdjustablePortals";
-        public const string PluginVersion = "0.6.0";
+        public const string PluginVersion = "0.7.0";
         internal static Harmony Harmony = new Harmony(PluginGUID);
 
         // Set in Awake, not here: a static initialiser can run before BepInEx has registered this plugin, and Jotunn
@@ -44,6 +44,7 @@ namespace AdjustablePortals
 
         public void Update() {
             Compatibility.RefreshStaleBackpacks();
+            PortalTargeting.Update();
         }
     }
 }
