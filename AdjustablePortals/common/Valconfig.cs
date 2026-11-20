@@ -24,7 +24,9 @@ namespace AdjustablePortals {
         public static ConfigEntry<string> DefeatedYagluthAllowItems;
         public static ConfigEntry<string> DefeatedQueenAllowItems;
         public static ConfigEntry<string> DefeatedFaderAllowItems;
+        public static ConfigEntry<string> DefeatedFrozenKingAllowItems;
         public static ConfigEntry<string> NonTeleportableItems;
+        public static ConfigEntry<bool> EnablePortalProgression;
         public static ConfigEntry<bool> UsePrivateKeys;
         public static ConfigEntry<bool> EnablePortalPieceRequirements;
         public static ConfigEntry<bool> EnablePortalRequireFuel;
@@ -61,7 +63,7 @@ namespace AdjustablePortals {
             }
             Logger.LogInfo($"Server configuration applied ({(e.InitialSynchronization ? "on join" : "update")}). " +
                 $"Nearby pieces required: {(EnablePortalPieceRequirements.Value ? PortalNearbyPiecesForActivation.Value.ToString() : "off")}, " +
-                $"fuel required: {EnablePortalRequireFuel.Value}, private keys: {UsePrivateKeys.Value}, " +
+                $"fuel required: {EnablePortalRequireFuel.Value}, item progression: {EnablePortalProgression.Value}, private keys: {UsePrivateKeys.Value}, " +
                 $"portal targeting: {PortalTargetingMode.Value}.");
         }
 
@@ -76,6 +78,7 @@ namespace AdjustablePortals {
             EnablePortalPieceRequirements = BindServerConfig("PortalActivation", "EnablePortalPieceRequirements", true, "When enabled, portals require a set number of building pieces around them in order to activate");
             PortalNearbyPiecesForActivation = BindServerConfig("PortalActivation", "PortalNearbyPiecesForActivation", 300, "The number of building pieces required nearby in order for a portal to be activated.", false, 0, 10000);
             PortalPieceActivationDistance = BindServerConfig("PortalActivation", "PortalPieceActivationDistance", 100f, "The distance that will be checked for nearby building pieces to meet the required structures nearby.");
+            PortalPieceActivationDistance.SettingChanged += ActivationRequirements.NearbyPieceCounts.RadiusChanged;
 
             EnablePortalRequireFuel = BindServerConfig("PortalActivation", "EnablePortalRequireFuel", false, "When enabled, portals require a fuel item to teleport users");
             PortalFuelUsagesPerBatch = BindServerConfig("PortalActivation", "PortalFuelUsagesPerBatch", 20, "The number of usages that one batch of the fuel type provides");
@@ -95,13 +98,14 @@ namespace AdjustablePortals {
                 "SelectFromList: stepping into a portal opens a list of every other portal to pick from. " +
                 "SelectOnMap: stepping into a portal opens the map with every other portal marked on it - when the map is disabled this uses SelectInSpace instead. " +
                 "SelectInSpace: stepping into a portal shows every other portal at its rough position against a starfield rather than the map, so it works without a map. " +
-                "In every mode but Vanilla, a portal is only offered as a destination once it has the nearby building pieces it needs to activate itself. " +
-                "Ignored while the TargetPortal mod is installed, which has its own map.");
+                "In every mode but Vanilla, a portal is only offered as a destination once it has the nearby building pieces it needs to activate itself.");
             PortalTargetingMode.SettingChanged += PortalTargeting.TargetingModeChanged;
 
 
+            EnablePortalProgression = BindServerConfig("PortalProgression", "EnablePortalProgression", true, "When enabled, the items listed below may be taken through portals once their boss is defeated. Turn this off to keep the game's usual item restrictions. NonTeleportableItems applies either way.");
+            EnablePortalProgression.SettingChanged += TeleportItems.ProgressionSettingChanged;
             UsePrivateKeys = BindServerConfig("PortalProgression", "UsePrivateKeys", false, "When enabled, the items below unlock for each player by the bosses that player has helped defeat, instead of by the bosses defeated anywhere in the world. Every player who landed a hit on a boss is credited with it when it dies.");
-            UsePrivateKeys.SettingChanged += TeleportItems.ProgressionKeySourceChanged;
+            UsePrivateKeys.SettingChanged += TeleportItems.ProgressionSettingChanged;
             DefeatedEikthyrAllowedItems = BindServerConfig("PortalProgression", "DefeatedEikthyrAllowedItems", "", "Comma seperated list of prefab items that will be allowed to teleported once Eikthyr is defeated.");
             DefeatedEikthyrAllowedItems.SettingChanged += TeleportItems.EikthyrAllowedTeleportsChanged;
             DefeatedElderAllowedItems = BindServerConfig("PortalProgression", "DefeatedElderAllowedItems", "", "Comma seperated list of prefab items that will be allowed to be teleported once The Elder is defeated.");
@@ -116,6 +120,8 @@ namespace AdjustablePortals {
             DefeatedQueenAllowItems.SettingChanged += TeleportItems.QueenAllowedTeleportsChanged;
             DefeatedFaderAllowItems = BindServerConfig("PortalProgression", "DefeatedFaderAllowItems", "DvergrNeedle", "Comma seperated list of prefab items that will be allowed to be teleported once Fader is defeated.");
             DefeatedFaderAllowItems.SettingChanged += TeleportItems.FaderAllowedTeleportsChanged;
+            DefeatedFrozenKingAllowItems = BindServerConfig("PortalProgression", "DefeatedFrozenKingAllowItems", "GoldOre", "Comma seperated list of prefab items that will be allowed to be teleported once the Deep North's final boss is defeated, in its last phase.");
+            DefeatedFrozenKingAllowItems.SettingChanged += TeleportItems.FrozenKingAllowedTeleportsChanged;
             NonTeleportableItems = BindServerConfig("PortalProgression", "NonTeleportableItems", "", "Comma seperated list of prefab items that may never be teleported, whatever bosses have been defeated. This applies everywhere, including portals and world settings that would otherwise let every item through.");
             NonTeleportableItems.SettingChanged += TeleportItems.NonTeleportableItemsChanged;
         }

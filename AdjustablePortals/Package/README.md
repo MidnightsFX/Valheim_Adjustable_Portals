@@ -6,11 +6,17 @@ This mod aims to make portal progression more gradual, and encourage portals onl
 ## Features
 
 **Portal Requirements**
-- Portals can require a configurable number of building pieces nearby to become functional (default 300, configurable)
+- Portals can require a configurable number of building pieces nearby to become functional (default 300, configurable).
+  The server counts the pieces around each portal, so every player sees the same count, whatever
+  part of the base their own game has loaded.
 - Portals can require a fuel to operate on (configurable), default is surtling codes 1 core = 20 teleports (cost only taken from source portal).
 
 **Portal Item Teleportation progression**
-- Portals can allow designated non-teleportable items through based on defeated bosses.
+- Portals can allow designated non-teleportable items through based on defeated bosses. Every
+  boss up to the Deep North's final boss has its own list, and that last one only unlocks once the
+  boss's final phase is defeated.
+- Turn off `EnablePortalProgression` to keep the game's usual item restrictions instead. The
+  never-teleportable list below still applies.
 - Progression can be per player instead of world wide. Turn on `UsePrivateKeys` and each player
   unlocks items by the bosses they helped defeat, rather than by any boss defeated on the server.
   Everyone who landed a hit on a boss is credited with it. Characters that killed bosses before
@@ -44,15 +50,14 @@ This mod aims to make portal progression more gradual, and encourage portals onl
     starfield instead of the map, so it works in worlds without a map. Scroll to zoom, drag to look
     around, and click a portal to travel there.
 - A portal is only offered as a destination once it has the nearby building pieces it needs to
-  activate itself. Its pieces are counted when someone with the mod is near it, so a portal in an
-  area nobody has visited since the mod was installed will not show up until someone does.
+  activate itself. The server counts every portal, including ones nobody has visited lately.
 - Fuel, item restrictions, carts, mounts and tames all work the same as through a portal pair.
 - Every qualifying portal can be travelled to, whatever it is named and whether or not it is
   inside a ward.
 
 **Compatibility**
-- TargetPortal (Smoothbrain): portal requirements and fuel apply before its map opens. While it is
-  installed, `PortalTargetingMode` is ignored and TargetPortal chooses destinations.
+- TargetPortal (Smoothbrain) is not compatible. `PortalTargetingMode` covers what it does, and this
+  mod does not load while TargetPortal is installed.
 - Backpacks (Smoothbrain): what a backpack may carry through a portal follows the same boss
   progression as your own inventory.
 
@@ -68,6 +73,11 @@ If you have feature suggestions, or improvement suggestions feel free to ask in 
 
 The following features are currently planned:
 - Configure portal building costs
+
+<!--
+AI_Assisted_Creation: This assembly was partially or fully created with the assistance of generative AI (Claude Code, using Anthropic's Claude models).
+AI_Model_Vendor: Anthropic
+-->
 
 ---
 

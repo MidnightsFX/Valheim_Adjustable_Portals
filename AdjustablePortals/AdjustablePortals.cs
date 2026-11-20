@@ -12,13 +12,14 @@ namespace AdjustablePortals
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
     [BepInDependency(Jotunn.Main.ModGuid)]
     [NetworkCompatibility(CompatibilityLevel.EveryoneMustHaveMod, VersionStrictness.Minor)]
-    [BepInDependency("org.bepinex.plugins.targetportal", BepInDependency.DependencyFlags.SoftDependency)]
+    // Chooses portal destinations itself, and both would take over the same portal trigger.
+    [BepInIncompatibility("org.bepinex.plugins.targetportal")]
     [BepInDependency(Compatibility.BackpacksGUID, BepInDependency.DependencyFlags.SoftDependency)]
     internal class AdjustablePortals : BaseUnityPlugin
     {
         public const string PluginGUID = "MidnightsFX.AdjustablePortals";
         public const string PluginName = "AdjustablePortals";
-        public const string PluginVersion = "0.7.0";
+        public const string PluginVersion = "0.8.0";
         internal static Harmony Harmony = new Harmony(PluginGUID);
 
         // Set in Awake, not here: a static initialiser can run before BepInEx has registered this plugin, and Jotunn
@@ -38,13 +39,14 @@ namespace AdjustablePortals
             Compatibility.CheckModCompat();
             Assembly assembly = Assembly.GetExecutingAssembly();
             Harmony.PatchAll(assembly);
-            Compatibility.TargetPortalCompat();
             Compatibility.BackpacksCompat();
         }
 
         public void Update() {
             Compatibility.RefreshStaleBackpacks();
             PortalTargeting.Update();
+            ActivationRequirements.NearbyPieceCounts.Update();
+            ActivationRequirements.PortalFuel.Update();
         }
     }
 }

@@ -16,6 +16,7 @@ namespace AdjustablePortals.modules {
         internal static readonly HashSet<string> YagluthAllowedTeleports = NewItemSet();
         internal static readonly HashSet<string> QueenAllowedTeleports = NewItemSet();
         internal static readonly HashSet<string> FaderAllowedTeleports = NewItemSet();
+        internal static readonly HashSet<string> FrozenKingAllowedTeleports = NewItemSet();
         internal static readonly HashSet<string> NonTeleportableItems = NewItemSet();
 
         // Whether boss progression has unlocked a prefab. Deliberately not the item's whole answer,
@@ -38,6 +39,7 @@ namespace AdjustablePortals.modules {
             ConfigListChanged(YagluthAllowedTeleports, ValConfig.DefeatedYagluthAllowItems.Value);
             ConfigListChanged(QueenAllowedTeleports, ValConfig.DefeatedQueenAllowItems.Value);
             ConfigListChanged(FaderAllowedTeleports, ValConfig.DefeatedFaderAllowItems.Value);
+            ConfigListChanged(FrozenKingAllowedTeleports, ValConfig.DefeatedFrozenKingAllowItems.Value);
             ConfigListChanged(NonTeleportableItems, ValConfig.NonTeleportableItems.Value);
         }
 
@@ -48,8 +50,9 @@ namespace AdjustablePortals.modules {
         internal static void YagluthAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(YagluthAllowedTeleports, ValConfig.DefeatedYagluthAllowItems.Value); }
         internal static void QueenAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(QueenAllowedTeleports, ValConfig.DefeatedQueenAllowItems.Value); }
         internal static void FaderAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(FaderAllowedTeleports, ValConfig.DefeatedFaderAllowItems.Value); }
+        internal static void FrozenKingAllowedTeleportsChanged(object s, EventArgs e) { ConfigListChanged(FrozenKingAllowedTeleports, ValConfig.DefeatedFrozenKingAllowItems.Value); }
         internal static void NonTeleportableItemsChanged(object s, EventArgs e) { ConfigListChanged(NonTeleportableItems, ValConfig.NonTeleportableItems.Value); }
-        internal static void ProgressionKeySourceChanged(object s, EventArgs e) { InvalidateCache(); }
+        internal static void ProgressionSettingChanged(object s, EventArgs e) { InvalidateCache(); }
 
         /// <summary>
         /// Forgets every cached progression answer. Anything that changes which bosses count as
@@ -90,8 +93,9 @@ namespace AdjustablePortals.modules {
         private static class AllowConfiguredTeleportableItems {
             [HarmonyPatch(nameof(Inventory.IsTeleportable))]
             private static void Postfix(Inventory __instance, ref bool __result) {
-                // Nothing to do if the inventory is already allowed to teleport
-                if (__result == true) { return; }
+                if (__result || ValConfig.EnablePortalProgression.Value == false) {
+                    return;
+                }
 
                 List<ItemDrop.ItemData> items = __instance.m_inventory;
                 // Vanilla refuses these outright, ahead of both allowAllItems and the TeleportAll
@@ -241,7 +245,7 @@ namespace AdjustablePortals.modules {
                 if (item.m_shared.m_teleportable) {
                     return true;
                 }
-                return IsUnlockedByProgression(itemPrefab);
+                return ValConfig.EnablePortalProgression.Value && IsUnlockedByProgression(itemPrefab);
             }
 
             private static bool IsUnlockedByProgression(string itemPrefab) {
@@ -255,7 +259,10 @@ namespace AdjustablePortals.modules {
                     || (ModerAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_dragon"))
                     || (YagluthAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_goblinking"))
                     || (QueenAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_queen"))
-                    || (FaderAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_fader"));
+                    || (FaderAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_fader"))
+                    // The Frozen King's first phase sets defeated_frozenking partway through the fight;
+                    // only its last phase dying sets this one.
+                    || (FrozenKingAllowedTeleports.Contains(itemPrefab) && ProgressionKeys.HasKey("defeated_frozenking_p3"));
 
                 //Logger.LogDebug($"Item is unlocked by progression? {itemPrefab} - {unlocked}");
                 ProgressionUnlocked[itemPrefab] = unlocked;

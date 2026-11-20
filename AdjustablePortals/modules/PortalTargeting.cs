@@ -15,10 +15,9 @@ namespace AdjustablePortals.modules {
     /// </summary>
     /// <remarks>
     /// The teleport itself does not go through TeleportWorld.Teleport, which only knows how to
-    /// reach the tag partner. It calls Player.TeleportTo directly, the way TargetPortal does, so
-    /// this module stands in for the things Teleport would otherwise have done: vanilla's own
-    /// refusals, the cart check, telling TeleportCompanions which portal the trip started from,
-    /// and charging fuel.
+    /// reach the tag partner. It calls Player.TeleportTo directly, so this module stands in for
+    /// the things Teleport would otherwise have done: vanilla's own refusals, the cart check,
+    /// telling TeleportCompanions which portal the trip started from, and charging fuel.
     /// </remarks>
     internal static class PortalTargeting {
 
@@ -62,7 +61,7 @@ namespace AdjustablePortals.modules {
         // Player.TeleportTo refuses anything for this long after the last teleport ends, and the
         // player usually arrives standing in the destination portal's trigger. Vanilla's trigger
         // does nothing in that window, so the picker should not pop up over a fresh arrival either.
-        private const float TeleportCooldownSeconds = 2f;
+        internal const float TeleportCooldownSeconds = 2f;
         // A list the server never answered is not worth leaving the portal stuck on.
         private const float RequestTimeoutSeconds = 5f;
         private const string UnnamedPortal = "Unnamed portal";
@@ -77,31 +76,19 @@ namespace AdjustablePortals.modules {
         // walked off, or after a newer request, is dropped by its id.
         private static int requestId = 0;
         private static float requestTime = 0f;
-        private static bool warnedAboutTargetPortal = false;
 
         // Reused by the server for each request; only ever touched on the main thread.
         private static readonly List<ZDO> eligibleBuffer = new List<ZDO>();
 
         /// <summary>
-        /// Whether portals are being picked rather than paired by name. TargetPortal brings its
-        /// own map that opens on the same trigger, so the two would fight over every portal - its
-        /// presence keeps this mod out of the way.
+        /// Whether portals are being picked rather than paired by name.
         /// </summary>
         internal static bool IsActive {
-            get { return Compatibility.IsTargetPortalInstalled == false && ValConfig.PortalTargetingMode.Value != TargetingMode.Vanilla; }
+            get { return ValConfig.PortalTargetingMode.Value != TargetingMode.Vanilla; }
         }
 
         internal static void TargetingModeChanged(object sender, EventArgs e) {
-            WarnIfIgnored();
             EndSession();
-        }
-
-        private static void WarnIfIgnored() {
-            if (warnedAboutTargetPortal || Compatibility.IsTargetPortalInstalled == false || ValConfig.PortalTargetingMode.Value == TargetingMode.Vanilla) {
-                return;
-            }
-            warnedAboutTargetPortal = true;
-            Logger.LogWarning($"PortalTargetingMode is set to {ValConfig.PortalTargetingMode.Value}, but TargetPortal is installed and chooses destinations itself. Portal targeting is left to TargetPortal.");
         }
 
         [HarmonyPatch(typeof(Game), nameof(Game.Start))]
@@ -110,7 +97,6 @@ namespace AdjustablePortals.modules {
             private static void Postfix() {
                 ZRoutedRpc.instance.Register<int>(RequestPortalsRPC, RPC_RequestPortals);
                 ZRoutedRpc.instance.Register<int, ZPackage>(PortalListRPC, RPC_PortalList);
-                WarnIfIgnored();
             }
         }
 
@@ -367,17 +353,20 @@ namespace AdjustablePortals.modules {
             // Closed first: the map picker ends on the map closing, and the teleport below should
             // not have the picker's teardown running in the middle of it.
             EndSession();
+            ActivationRequirements.PortalFuel.SpendThen(source, traveller => Travel(source, traveller, destination));
+        }
 
+        private static bool Travel(TeleportWorld source, Player player, Destination destination) {
             // Vanilla's exit, from TeleportWorld.Teleport: a step out of the far portal's front,
             // facing away from it.
             Vector3 exit = destination.Position + destination.Rotation * Vector3.forward * source.m_exitDistance + Vector3.up;
             TeleportCompanions.NoteSourcePortal(source);
             if (player.TeleportTo(exit, destination.Rotation, distantTeleport: true) == false) {
-                return;
+                return false;
             }
             Logger.LogDebug($"Travelling to portal \"{destination.Name}\" {destination.DistanceText}.");
-            ActivationRequirements.PortalInstanceActivatable.ConsumeFuel(source);
             Game.instance.IncrementPlayerStat(PlayerStatType.PortalsUsed);
+            return true;
         }
 
         /// <summary>
@@ -452,7 +441,6 @@ namespace AdjustablePortals.modules {
         internal static void ClearSessionState() {
             EndSession();
             eligibleBuffer.Clear();
-            warnedAboutTargetPortal = false;
         }
 
         private static string CompassPoint(Vector3 offset) {

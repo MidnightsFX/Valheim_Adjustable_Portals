@@ -1,3 +1,13 @@
+**0.8.0**
+---
+```
+- Defeating the Deep North's final boss now unlocks its own items for teleporting, starting with gold ore.
+- Fixes a portal's nearby building count differing between players and dropping in multiplayer, which could switch the portal off.
+- Fixes players on a lagging connection being able to travel through a portal whose fuel had run out, or losing fuel they added to it.
+- Now Incompatible with TargetPortal. This fixes a bug with using both mods.
+- Unlocking items for portals by defeating bosses can now be toggled off.
+```
+
 **0.7.0**
 ---
 ```

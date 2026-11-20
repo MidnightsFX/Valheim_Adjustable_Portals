@@ -21,9 +21,7 @@ namespace AdjustablePortals.modules {
         /// <summary>
         /// What a portal trip needs to know, captured before the teleport starts. By the time the
         /// teleport has actually begun the answers are already going away: Vagon.Update detaches
-        /// the cart the moment the player counts as teleporting, and the TargetPortal
-        /// compatibility layer clears its own note of the source portal in a postfix that Harmony
-        /// is free to run before ours.
+        /// the cart the moment the player counts as teleporting.
         /// </summary>
         private struct PortalTrip {
             public bool FromPortal;
@@ -37,8 +35,8 @@ namespace AdjustablePortals.modules {
         // TeleportWorld.Teleport calls Player.TeleportTo from its own body, so a frame stamp is
         // all it takes to pair the two - and to tell a portal trip apart from every other
         // TeleportTo, none of which should drag a herd along.
-        private static TeleportWorld vanillaSourcePortal = null;
-        private static int vanillaSourcePortalFrame = -1;
+        private static TeleportWorld sourcePortal = null;
+        private static int sourcePortalFrame = -1;
 
         // Companions are fanned out around the exit rather than stacked on it, so a lox does not
         // land inside the player. Sunflower spacing: no ring sizes to pick, and it stays compact
@@ -63,8 +61,8 @@ namespace AdjustablePortals.modules {
         /// keep a destroyed portal alive until the next one comes along.
         /// </summary>
         internal static void ClearSessionState() {
-            vanillaSourcePortal = null;
-            vanillaSourcePortalFrame = -1;
+            sourcePortal = null;
+            sourcePortalFrame = -1;
             tameBuffer.Clear();
             blockedItemBuffer.Clear();
         }
@@ -75,8 +73,8 @@ namespace AdjustablePortals.modules {
         /// PortalTargeting's pickers call it.
         /// </summary>
         internal static void NoteSourcePortal(TeleportWorld portal) {
-            vanillaSourcePortal = portal;
-            vanillaSourcePortalFrame = Time.frameCount;
+            sourcePortal = portal;
+            sourcePortalFrame = Time.frameCount;
         }
 
         /// <summary>
@@ -517,11 +515,10 @@ namespace AdjustablePortals.modules {
                         if (IsCartTeleportable(cart, portal.m_allowAllItems, out string blockedBy)) {
                             __state.Cart = cart;
                         } else {
-                            // The vanilla path refuses the whole teleport before it ever reaches
-                            // here. TargetPortal goes straight from its map to TeleportTo, so this
-                            // is the only place that sees the cart on that path - leave it and its
-                            // contents behind rather than letting the progression allowances be
-                            // walked around by opening a different interface.
+                            // The portal checked the cart before the trip, but a trip that waited on
+                            // the portal's owner for fuel starts a moment later, and something may
+                            // have gone into the cart since. Leave it and its contents behind
+                            // rather than let that get past the progression allowances.
                             __state.CartBlockedBy = blockedBy;
                         }
                     }
@@ -545,13 +542,7 @@ namespace AdjustablePortals.modules {
             }
 
             private static TeleportWorld ResolveSourcePortal() {
-                if (vanillaSourcePortal != null && vanillaSourcePortalFrame == Time.frameCount) {
-                    return vanillaSourcePortal;
-                }
-                // TargetPortal teleports from the map instead of from the portal's own trigger, so
-                // nothing called TeleportWorld.Teleport and the portal is only known to the
-                // compatibility layer that saw the map open.
-                return Compatibility.GetActiveSourcePortal();
+                return sourcePortal != null && sourcePortalFrame == Time.frameCount ? sourcePortal : null;
             }
         }
     }
