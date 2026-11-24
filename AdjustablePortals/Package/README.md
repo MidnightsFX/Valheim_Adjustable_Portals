@@ -43,8 +43,8 @@ This mod aims to make portal progression more gradual, and encourage portals onl
   - `SelectFromList`: stepping into a portal opens a list of every other portal, which you can
     filter by typing. Each entry shows how far away it is and in which direction, which tells
     apart portals that share a name.
-  - `SelectOnMap`: stepping into a portal opens the map with every other portal marked on it.
-    Click one to travel there, or close the map to stay. When the map is turned off, this uses
+  - `SelectOnMap`: stepping into a portal opens the map with every other portal marked on it,
+    each with an orange and red glow. Click one to travel there, or close the map to stay. When the map is turned off, this uses
     `SelectInSpace` instead.
   - `SelectInSpace`: shows every other portal where it lies relative to the others, against a
     starfield instead of the map, so it works in worlds without a map. Scroll to zoom, drag to look

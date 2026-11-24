@@ -1,3 +1,9 @@
+**0.8.1**
+---
+```
+- Makes map or starfield portal selection more visible
+```
+
 **0.8.0**
 ---
 ```

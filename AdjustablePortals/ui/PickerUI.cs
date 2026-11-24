@@ -22,6 +22,13 @@ namespace AdjustablePortals.ui {
 
         internal static readonly Color OverlayColor = new Color(0f, 0f, 0f, 0.35f);
 
+        // The glow is this many times the icon's size, so a ring of it shows around the icon.
+        private const float GlowScale = 1.75f;
+        private const int GlowTextureSize = 128;
+        private static readonly Color GlowCore = new Color(1f, 0.62f, 0.16f, 1f);
+        private static readonly Color GlowRim = new Color(0.86f, 0.14f, 0.04f, 1f);
+        private static Sprite portalGlow;
+
         internal static GameObject NewUI(string name, Transform parent, params Type[] components) {
             GameObject go = new GameObject(name, components) { layer = GUIManager.UILayer };
             if (go.GetComponent<RectTransform>() == null) {
@@ -188,6 +195,59 @@ namespace AdjustablePortals.ui {
             }
             Piece piece = prefab.GetComponent<Piece>();
             return piece != null ? piece.m_icon : null;
+        }
+
+        /// <summary>
+        /// A soft disc in a portal's orange and red, to sit behind a portal icon of
+        /// <paramref name="iconSize"/>.
+        /// </summary>
+        /// <remarks>
+        /// A UI child always draws over its parent, so the glow cannot hang off the icon it sits
+        /// behind. The pickers give their glows a parent of their own, ahead of the icons, which
+        /// also keeps one portal's glow from covering a neighbouring portal's icon.
+        /// </remarks>
+        internal static RectTransform AddPortalGlow(Transform parent, float iconSize) {
+            GameObject go = NewUI("PortalGlow", parent, typeof(Image));
+            RectTransform rt = (RectTransform)go.transform;
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(iconSize * GlowScale, iconSize * GlowScale);
+            Image image = go.GetComponent<Image>();
+            image.sprite = PortalGlow();
+            image.raycastTarget = false;
+            return rt;
+        }
+
+        private static Sprite PortalGlow() {
+            if (portalGlow != null) {
+                return portalGlow;
+            }
+            int size = GlowTextureSize;
+            Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.filterMode = FilterMode.Bilinear;
+            Color[] pixels = new Color[size * size];
+            float half = size / 2f;
+            for (int y = 0; y < size; y++) {
+                for (int x = 0; x < size; x++) {
+                    // 0 at the centre, 1 at the edge of the disc.
+                    float r = new Vector2(x + 0.5f - half, y + 0.5f - half).magnitude / half;
+                    // The icon covers the middle, so only the outer half shows: orange right
+                    // around the icon, red further out, fading to nothing at the edge.
+                    Color colour = Color.Lerp(GlowCore, GlowRim, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.45f, 0.95f, r)));
+                    colour.a = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.5f, 1f, r));
+                    pixels[y * size + x] = colour;
+                }
+            }
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            portalGlow = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f));
+            // Kept for the whole session, through every world loaded and the asset unloading
+            // that comes with it.
+            texture.hideFlags = HideFlags.HideAndDontSave;
+            portalGlow.hideFlags = HideFlags.HideAndDontSave;
+            return portalGlow;
         }
     }
 

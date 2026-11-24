@@ -29,6 +29,7 @@ namespace AdjustablePortals.ui {
         private const float ExtraZoomIn = 1.25f;
 
         private static readonly Dictionary<Minimap.PinData, Destination> pins = new Dictionary<Minimap.PinData, Destination>();
+        private static readonly Dictionary<Minimap.PinData, RectTransform> glows = new Dictionary<Minimap.PinData, RectTransform>();
         private static bool selecting = false;
         private static float closedAt = -10f;
         private static bool inUpdateNoMap = false;
@@ -58,6 +59,13 @@ namespace AdjustablePortals.ui {
                 // the only time the pin's icon is read.
                 pin.m_icon = PickerUI.PortalIcon(destination.PrefabHash);
                 pins[pin] = destination;
+
+                // First in the pin root, so it draws behind every pin on the map; PinGlows
+                // moves it onto its pin.
+                RectTransform glow = PickerUI.AddPortalGlow(map.m_pinRootLarge, map.m_pinSizeLarge);
+                glow.SetAsFirstSibling();
+                glow.gameObject.SetActive(false);
+                glows[pin] = glow;
             }
             return true;
         }
@@ -74,6 +82,11 @@ namespace AdjustablePortals.ui {
                 foreach (Minimap.PinData pin in pins.Keys) {
                     map.RemovePin(pin);
                 }
+                foreach (RectTransform glow in glows.Values) {
+                    if (glow != null) {
+                        UnityEngine.Object.Destroy(glow.gameObject);
+                    }
+                }
                 if (vanillaMinZoom > 0f) {
                     map.m_minZoom = vanillaMinZoom;
                     // Re-clamped, so the ordinary map does not reopen zoomed in further than it
@@ -85,6 +98,7 @@ namespace AdjustablePortals.ui {
                 }
             }
             pins.Clear();
+            glows.Clear();
             vanillaMinZoom = -1f;
         }
 
@@ -185,6 +199,31 @@ namespace AdjustablePortals.ui {
             private static void CancelWhenMapCloses(Minimap __instance) {
                 if (selecting && __instance.m_mode != Minimap.MapMode.Large) {
                     PortalTargeting.Cancel();
+                }
+            }
+        }
+
+        // UpdatePins places every pin's marker after the map pans or zooms, and destroys the marker
+        // of a pin that is off the part of the map on screen.
+        [HarmonyPatch(typeof(Minimap), nameof(Minimap.UpdatePins))]
+        private static class PinGlows {
+            private static void Postfix() {
+                if (selecting == false) {
+                    return;
+                }
+                foreach (KeyValuePair<Minimap.PinData, RectTransform> entry in glows) {
+                    RectTransform marker = entry.Key.m_uiElement;
+                    RectTransform glow = entry.Value;
+                    if (glow == null) {
+                        continue;
+                    }
+                    bool shown = marker != null;
+                    if (glow.gameObject.activeSelf != shown) {
+                        glow.gameObject.SetActive(shown);
+                    }
+                    if (shown) {
+                        glow.position = marker.TransformPoint(marker.rect.center);
+                    }
                 }
             }
         }

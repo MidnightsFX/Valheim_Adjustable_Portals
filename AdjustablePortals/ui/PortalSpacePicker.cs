@@ -56,8 +56,9 @@ namespace AdjustablePortals.ui {
         private const string Hint = "Scroll to zoom, drag to look around.";
 
         private class Marker {
-            // Null for the portal the player is standing in.
+            // Both null for the portal the player is standing in.
             public Destination Destination;
+            public RectTransform Glow;
             public Vector2 WorldXZ;
             public RectTransform Rect;
             public Text Label;
@@ -66,6 +67,7 @@ namespace AdjustablePortals.ui {
         private static PortalSpacePicker current = null;
 
         private PickerWindow window;
+        private RectTransform glowRoot;
         private RectTransform markerRoot;
         private Text footer;
         private Texture2D starfield;
@@ -117,12 +119,9 @@ namespace AdjustablePortals.ui {
             view.gameObject.AddComponent<RectMask2D>();
             view.gameObject.AddComponent<SpaceViewInput>().Picker = this;
 
-            markerRoot = (RectTransform)PickerUI.NewUI("Portals", view).transform;
-            markerRoot.anchorMin = new Vector2(0.5f, 0.5f);
-            markerRoot.anchorMax = new Vector2(0.5f, 0.5f);
-            markerRoot.pivot = new Vector2(0.5f, 0.5f);
-            markerRoot.sizeDelta = Vector2.zero;
-            markerRoot.anchoredPosition = Vector2.zero;
+            // Glows first, so they draw behind every portal icon.
+            glowRoot = NewCentredRoot("Glows", view);
+            markerRoot = NewCentredRoot("Portals", view);
 
             float footerTop = ViewTop + viewHeight;
             footer = PickerUI.AddText(panel.transform, Margin, footerTop + 8f, viewWidth, 28f, DefaultFooter, 18, TextAnchor.MiddleCenter);
@@ -150,6 +149,16 @@ namespace AdjustablePortals.ui {
             }
         }
 
+        private static RectTransform NewCentredRoot(string name, Transform parent) {
+            RectTransform root = (RectTransform)PickerUI.NewUI(name, parent).transform;
+            root.anchorMin = new Vector2(0.5f, 0.5f);
+            root.anchorMax = new Vector2(0.5f, 0.5f);
+            root.pivot = new Vector2(0.5f, 0.5f);
+            root.sizeDelta = Vector2.zero;
+            root.anchoredPosition = Vector2.zero;
+            return root;
+        }
+
         private Marker AddMarker(Destination destination, Vector2 worldXZ, Sprite icon, string label, Color tint, float size) {
             GameObject go = PickerUI.NewUI(destination != null ? "Portal" : "YouAreHere", markerRoot, typeof(Image));
             RectTransform rt = (RectTransform)go.transform;
@@ -168,6 +177,7 @@ namespace AdjustablePortals.ui {
                 destination != null ? GUIManager.Instance.ValheimBeige : SourceTint);
 
             if (destination != null) {
+                marker.Glow = PickerUI.AddPortalGlow(glowRoot, size);
                 Button button = go.AddComponent<Button>();
                 button.targetGraphic = image;
                 button.onClick.AddListener(() => Pick(destination));
@@ -202,6 +212,9 @@ namespace AdjustablePortals.ui {
             foreach (Marker marker in markers) {
                 // Screen up is north, which is +z.
                 marker.Rect.anchoredPosition = (marker.WorldXZ - viewCentre) * pixelsPerMetre;
+                if (marker.Glow != null) {
+                    marker.Glow.anchoredPosition = marker.Rect.anchoredPosition;
+                }
                 marker.Label.enabled = labelAll || marker == focused || marker.Destination == null;
             }
         }
@@ -241,7 +254,7 @@ namespace AdjustablePortals.ui {
 
         private void SetFocus(Marker marker, bool fromSelection) {
             if (focused != null && focused != marker) {
-                focused.Rect.localScale = Vector3.one;
+                SetScale(focused, 1f);
             }
             focused = marker;
             if (marker == null) {
@@ -249,15 +262,22 @@ namespace AdjustablePortals.ui {
                 Layout();
                 return;
             }
-            marker.Rect.localScale = new Vector3(FocusedScale, FocusedScale, 1f);
+            SetScale(marker, FocusedScale);
             // Drawn over its neighbours, label and all.
             marker.Rect.SetAsLastSibling();
+            marker.Glow.SetAsLastSibling();
             footer.text = $"{marker.Destination.Name}   {marker.Destination.DistanceText}";
             // A gamepad can move the selection onto a portal that is out of view.
             if (fromSelection && IsInView(marker) == false) {
                 viewCentre = marker.WorldXZ;
             }
             Layout();
+        }
+
+        private static void SetScale(Marker marker, float scale) {
+            Vector3 scaled = new Vector3(scale, scale, 1f);
+            marker.Rect.localScale = scaled;
+            marker.Glow.localScale = scaled;
         }
 
         private void ClearFocus(Marker marker) {
