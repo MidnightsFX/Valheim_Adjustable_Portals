@@ -1,7 +1,7 @@
 **0.9.0**
 ---
 ```
-- Rebuilt for the latest Valheim update.
+- Rebuilt for Valheim 1.0.30
 - In worlds that turn portals off during boss fights, only players near the fight are now kept from portals, and servers can choose to block everyone again.
 - Fixes a cart that came through a portal sometimes pushing the player straight back through it.
 ```
