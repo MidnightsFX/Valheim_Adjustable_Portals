@@ -10,6 +10,9 @@ This mod aims to make portal progression more gradual, and encourage portals onl
   The server counts the pieces around each portal, so every player sees the same count, whatever
   part of the base their own game has loaded.
 - Portals can require a fuel to operate on (configurable), default is surtling codes 1 core = 20 teleports (cost only taken from source portal).
+- In worlds with the world modifier that turns portals off during boss fights, only players near
+  the boss being fought are kept from portals. Turn on `BossFightsElsewhereBlockPortals` to block
+  every portal in the world while any boss is fighting, as the game does.
 
 **Portal Item Teleportation progression**
 - Portals can allow designated non-teleportable items through based on defeated bosses. Every

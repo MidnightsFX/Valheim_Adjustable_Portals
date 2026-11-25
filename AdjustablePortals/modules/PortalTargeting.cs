@@ -175,7 +175,7 @@ namespace AdjustablePortals.modules {
                 reason = "$msg_blocked";
                 return false;
             }
-            if (zones.GetGlobalKey(GlobalKeys.NoBossPortals) && (RandEventSystem.instance.GetBossEvent() != null || (zones.GetGlobalKey(GlobalKeys.activeBosses, out float activeBosses) && activeBosses > 0f))) {
+            if (BossFightPortals.BlocksTravel()) {
                 reason = "$msg_blockedbyboss";
                 return false;
             }

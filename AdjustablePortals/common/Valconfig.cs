@@ -33,6 +33,7 @@ namespace AdjustablePortals {
         public static ConfigEntry<int> PortalFuelUsagesPerBatch;
         public static ConfigEntry<int> PortalFuelBatchSize;
         public static ConfigEntry<string> PortalFuelPrefab;
+        public static ConfigEntry<bool> BossFightsElsewhereBlockPortals;
         public static ConfigEntry<bool> EnableTeleportMounts;
         public static ConfigEntry<bool> EnableTeleportTames;
         public static ConfigEntry<float> TeleportTamesRadius;
@@ -64,7 +65,7 @@ namespace AdjustablePortals {
             Logger.LogInfo($"Server configuration applied ({(e.InitialSynchronization ? "on join" : "update")}). " +
                 $"Nearby pieces required: {(EnablePortalPieceRequirements.Value ? PortalNearbyPiecesForActivation.Value.ToString() : "off")}, " +
                 $"fuel required: {EnablePortalRequireFuel.Value}, item progression: {EnablePortalProgression.Value}, private keys: {UsePrivateKeys.Value}, " +
-                $"portal targeting: {PortalTargetingMode.Value}.");
+                $"portal targeting: {PortalTargetingMode.Value}, boss fights elsewhere block portals: {BossFightsElsewhereBlockPortals.Value}.");
         }
 
         private void CreateConfigValues(ConfigFile Config) {
@@ -84,6 +85,11 @@ namespace AdjustablePortals {
             PortalFuelUsagesPerBatch = BindServerConfig("PortalActivation", "PortalFuelUsagesPerBatch", 20, "The number of usages that one batch of the fuel type provides");
             PortalFuelBatchSize = BindServerConfig("PortalActivation", "PortalFuelBatchSize", 1, "The number of the portal fuel required for activation.");
             PortalFuelPrefab = BindServerConfig("PortalActivation", "PortalFuelPrefab", "SurtlingCore", "The prefab name that will be used for the portal costs.");
+
+            BossFightsElsewhereBlockPortals = BindServerConfig("PortalActivation", "BossFightsElsewhereBlockPortals", false,
+                "Only matters in worlds with the world modifier that turns off portals during boss fights. Players near a boss that is fighting can never use a portal there. " +
+                "When enabled, a boss fighting anywhere in the world also blocks every other portal, for every player, as the game does. " +
+                "When disabled, players away from the fight can still travel.");
 
             EnableTeleportMounts = BindServerConfig("PortalCompanions", "EnableTeleportMounts", true, "When enabled, a player riding a mount into a portal takes the mount with them and is put back in the saddle on arrival.");
             EnableTeleportTames = BindServerConfig("PortalCompanions", "EnableTeleportTames", true, "When enabled, tamed creatures near the portal travel with the player to the destination.");

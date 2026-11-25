@@ -47,6 +47,28 @@ namespace AdjustablePortals.modules {
         // Player.UpdateTeleport gives up on a destination that never finishes loading at 15s, so
         // anything still waiting past this was never going to arrive.
         private const float ArrivalTimeoutSeconds = 20f;
+        // The teleport ends with the player hanging at the exit, a metre above the floor. A drop that
+        // long takes under half a second; past this they are swimming or stuck, and waiting longer
+        // only leaves the cart loose.
+        private const float LandingTimeoutSeconds = 3f;
+
+        // Directions an arriving cart may trail in, in degrees from straight out of the portal. Never
+        // back toward it: the portal's trigger sits half a metre behind a player standing at the exit,
+        // and a cart that rolls into the player can push them back through.
+        private static readonly float[] CartTrailAngles = { 0f, -45f, 45f, -90f, 90f };
+        // How much lower the ground must be to one side before the cart is parked there instead of
+        // straight out. Parked downhill, it pulls the player away from the portal rather than into it.
+        private const float CartDownhillPreference = 0.1f;
+        // Ground further below the player than this is a ledge, not a slope.
+        private const float CartMaxDrop = 2.5f;
+        // Half the cart's width plus some room, measured from its centre line to a creature's edge.
+        // A cart parked on a tame that came through first lands on top of it and lifts the player.
+        private const float CartClearance = 1f;
+        // How far the cart reaches past the point it is measured to, toward its tail.
+        private const float CartTailLength = 1f;
+        // Where the cart's body starts, out from the player holding its handle. Measured from there so
+        // a tame at the player's side rules out only the side it is on.
+        private const float CartHandleClearance = 0.5f;
 
         // Enough to tell the player what to unload without papering the screen with a manifest.
         private const int MaxBlockingItemsListed = 3;
@@ -274,6 +296,13 @@ namespace AdjustablePortals.modules {
             tame.m_maxAirAltitude = destination.y;
         }
 
+        private static void MoveCart(Vagon cart, Vector3 destination, Quaternion rotation) {
+            cart.m_nview.ClaimOwnership();
+            cart.transform.rotation = rotation;
+            cart.m_nview.GetZDO().SetRotation(rotation);
+            MoveCart(cart, destination);
+        }
+
         private static void MoveCart(Vagon cart, Vector3 destination) {
             MoveToDestination(cart.m_nview, cart.transform, destination);
             if (cart.m_bodies == null) {
@@ -287,6 +316,7 @@ namespace AdjustablePortals.modules {
                     continue;
                 }
                 body.position = body.transform.position;
+                body.rotation = body.transform.rotation;
                 body.linearVelocity = Vector3.zero;
                 body.angularVelocity = Vector3.zero;
             }
@@ -347,15 +377,19 @@ namespace AdjustablePortals.modules {
         /// rebuilt at the destination, then hands the new instance to <paramref name="arrived"/>.
         /// </summary>
         /// <remarks>
-        /// The companion was sent to the portal's exit position, but the player lands wherever
-        /// ZoneSystem.FindFloor puts them, which is not the same spot - and the companion's own
-        /// instance is destroyed and rebuilt in between, so nothing about it can be held as a
-        /// reference across the wait.
+        /// The teleport counts as over while the player still hangs at the exit, a metre up;
+        /// Player.UpdateTeleport only checks that there is a floor below and lets them drop onto it.
+        /// The companion's own instance is destroyed and rebuilt in the meantime, so nothing about it
+        /// can be held as a reference across the wait.
         /// </remarks>
         private static IEnumerator AfterArrival(Player player, ZDOID id, string what, Func<Player, GameObject, IEnumerator> arrived) {
             float deadline = Time.time + ArrivalTimeoutSeconds;
 
             while (Time.time < deadline && player != null && player.IsTeleporting()) {
+                yield return null;
+            }
+            float landing = Time.time + LandingTimeoutSeconds;
+            while (Time.time < landing && player != null && player.IsOnGround() == false) {
                 yield return null;
             }
 
@@ -384,10 +418,13 @@ namespace AdjustablePortals.modules {
                 yield break;
             }
 
-            // Land the cart's handle exactly where the joint wants it. The offset from the cart's
-            // root to its handle is fixed, so this works whichever way round the cart ended up.
-            Vector3 handleOffset = cart.m_attachPoint.position - cart.transform.position;
-            MoveCart(cart, player.transform.position + cart.m_attachOffset - handleOffset);
+            // Handle exactly where the joint wants it, body trailing away from the portal. The cart is
+            // turned rather than left facing the way it went into the source portal, which may point
+            // straight back through this one.
+            Vector3 handle = Quaternion.Inverse(cart.transform.rotation) * (cart.m_attachPoint.position - cart.transform.position);
+            Vector3 trail = CartTrailDirection(player, new Vector2(handle.x, handle.z).magnitude);
+            Quaternion rotation = Quaternion.LookRotation(handle.z >= 0f ? -trail : trail);
+            MoveCart(cart, player.transform.position + cart.m_attachOffset - rotation * handle, rotation);
 
             if (ValConfig.ReattachCartAfterTeleport.Value == false) {
                 yield break;
@@ -399,6 +436,65 @@ namespace AdjustablePortals.modules {
             if (player != null && cart != null && player.IsTeleporting() == false) {
                 cart.AttachTo(player.gameObject);
             }
+        }
+
+        /// <summary>
+        /// Which way a cart whose centre is <paramref name="reach"/> metres from its handle should
+        /// trail from a player who has just come out of a portal: straight out, unless that spot is
+        /// taken or the ground falls away more to one side.
+        /// </summary>
+        /// <remarks>
+        /// m_teleportTargetRot is the exit's facing whichever way the player has turned since. The
+        /// ground is read from two metres above the player's feet, under a roof as well as in the open.
+        /// </remarks>
+        private static Vector3 CartTrailDirection(Player player, float reach) {
+            Vector3 outward = player.m_teleportTargetRot * Vector3.forward;
+            outward.y = 0f;
+            outward = outward.sqrMagnitude > 0.001f ? outward.normalized : player.transform.forward;
+            Vector3 feet = player.transform.position;
+            Vector3 best = outward;
+            float bestGround = float.MaxValue;
+            bool bestFree = false;
+            foreach (float angle in CartTrailAngles) {
+                Vector3 direction = Quaternion.Euler(0f, angle, 0f) * outward;
+                if (ZoneSystem.instance.GetSolidHeight(feet + direction * reach, out float ground, 2) == false || ground < feet.y - CartMaxDrop) {
+                    continue;
+                }
+                bool free = IsCartSpotFree(player, feet + direction * CartHandleClearance, feet + direction * (reach + CartTailLength));
+                if ((free && bestFree == false) || (free == bestFree && ground < bestGround - CartDownhillPreference)) {
+                    best = direction;
+                    bestGround = ground;
+                    bestFree = free;
+                }
+            }
+            return best;
+        }
+
+        private static bool IsCartSpotFree(Player player, Vector3 front, Vector3 tail) {
+            List<Character> characters = Character.GetAllCharacters();
+            for (int i = 0; i < characters.Count; i++) {
+                Character character = characters[i];
+                if (character == null || character == player || character.IsDead()) {
+                    continue;
+                }
+                Vector3 position = character.transform.position;
+                // Someone on another floor of the same building is not in the way.
+                if (Mathf.Abs(position.y - front.y) > 2f) {
+                    continue;
+                }
+                if (FlatDistanceToSegment(position, front, tail) < CartClearance + character.GetRadius()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static float FlatDistanceToSegment(Vector3 point, Vector3 from, Vector3 to) {
+            Vector2 p = new Vector2(point.x, point.z);
+            Vector2 a = new Vector2(from.x, from.z);
+            Vector2 ab = new Vector2(to.x, to.z) - a;
+            float along = ab.sqrMagnitude > 0f ? Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude) : 0f;
+            return Vector2.Distance(p, a + ab * along);
         }
 
         /// <summary>
